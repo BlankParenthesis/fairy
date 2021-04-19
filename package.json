@@ -11,15 +11,13 @@
 	"license": "UNLICENSED",
 	"author": {
 		"name": "Blank Parenthesis",
-		"email": "blank.parenthesis@gmail.com",
-		"url": "https://thevoid.cc"
+		"email": "blank.parenthesis@gmail.com"
 	},
 	"contributors": [],
 	"maintainers": [
 		{
 			"name": "Blank Parenthesis",
-			"email": "blank.parenthesis@gmail.com",
-			"url": "https://thevoid.cc"
+			"email": "blank.parenthesis@gmail.com"
 		}
 	],
 	"main": "lib",
