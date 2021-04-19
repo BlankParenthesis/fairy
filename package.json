@@ -36,7 +36,7 @@
 	},
 	"repository": {
 		"type": "git",
-		"url": ""
+		"url": "https://gitlab.com/nbsp_nbsp/fairy"
 	},
 	"dependencies": {
 		"bufferutil": "^4.0.3",
@@ -51,7 +51,7 @@
 		"node-opus": "^0.3.3",
 		"opusscript": "^0.0.6",
 		"pngjs": "^3.4.0",
-		"pxls": "^1.0.0",
+		"pxls": "git+ssh://git@gitlab.com:nbsp_nbsp/pxls.js.git",
 		"sharp": "^0.23.4",
 		"sodium": "^3.0.2",
 		"uws": "^9.14.0"
