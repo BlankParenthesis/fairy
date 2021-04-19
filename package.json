@@ -4,7 +4,10 @@
 	"description": "A bot for the Cirno Embassy pxls.space faction",
 	"keywords": [
 		"pxls",
-		"api"
+        "bot",
+        "template",
+        "discord",
+        "embed"
 	],
 	"homepage": "https://perfectfreeze.art",
 	"bugs": "",
