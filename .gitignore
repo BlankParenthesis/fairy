@@ -1,5 +1,4 @@
 node_modules
-templates
+data
 config.json
-persistent.json
 .node_repl_history
