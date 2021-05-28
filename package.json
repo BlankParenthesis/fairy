@@ -39,26 +39,26 @@
 		"url": "https://gitlab.com/nbsp_nbsp/fairy"
 	},
 	"dependencies": {
-		"bufferutil": "^4.0.3",
-		"chalk": "^2.4.2",
-		"discord.js": "^11.6.4",
-		"erlpack": "^0.1.3",
-		"got": "^8.0.0",
-		"libsodium-wrappers": "^0.7.9",
+		"@discordjs/opus": "^0.5.0",
+		"bufferutil": "^4.0.0",
+		"chalk": "^4.0.0",
+		"discord.js": "^12.0.0",
+		"erlpack": "^0.1.0",
+		"got": "^11.0.0",
+		"libsodium-wrappers": "^0.7.0",
 		"long": "^4.0.0",
-		"moment": "^2.29.1",
-		"nan": "^2.14.2",
-		"node-opus": "^0.3.3",
-		"opusscript": "^0.0.6",
-		"pngjs": "^3.4.0",
-		"pxls": "git+ssh://git@gitlab.com:nbsp_nbsp/pxls.js.git",
-		"sharp": "^0.23.4",
-		"sodium": "^3.0.2",
-		"uws": "^9.14.0"
+		"moment": "^2.0.0",
+		"nan": "^2.0.0",
+		"opusscript": "^0.0.8",
+		"pngjs": "^6.0.0",
+		"pxls": "gitlab:nbsp_nbsp/pxls.js",
+		"sharp": "^0.27.0",
+		"sodium": "^3.0.0",
+		"uws": "^200.0.0"
 	},
 	"devDependencies": {
-		"eslint": "^5.16.0",
-		"mocha": "^8.3.0"
+		"eslint": "^7.0.0",
+		"mocha": "^8.0.0"
 	},
 	"engines": {
 		"node": ">=10.0.0"
