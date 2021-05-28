@@ -1,7 +1,7 @@
 {
 	"name": "fairy",
 	"version": "1.0.0",
-	"description": "A bot for the Cirno Embassy pxls.space faction",
+	"description": "A pxls.space template tracking bot for Discord",
 	"keywords": [
 		"pxls",
 		"bot",
@@ -29,7 +29,7 @@
 		"test": "test"
 	},
 	"scripts": {
-		"start": "node --max-old-space-size=4092 --experimental-repl-await lib/bot.js ",
+		"start": "node --max-old-space-size=4092 lib/bot.js ",
 		"test": "mocha test/pxls.test.js",
 		"progress": "mocha test/pxls.test.js --reporter dot",
 		"lint": "eslint lib/*.js ; exit 0"
@@ -39,7 +39,6 @@
 		"url": "https://gitlab.com/nbsp_nbsp/fairy"
 	},
 	"dependencies": {
-		"@discordjs/opus": "^0.5.0",
 		"bufferutil": "^4.0.0",
 		"chalk": "^4.0.0",
 		"discord.js": "^12.0.0",
@@ -47,21 +46,20 @@
 		"got": "^11.0.0",
 		"libsodium-wrappers": "^0.7.0",
 		"long": "^4.0.0",
-		"moment": "^2.0.0",
 		"nan": "^2.0.0",
-		"opusscript": "^0.0.8",
 		"pngjs": "^6.0.0",
 		"pxls": "gitlab:nbsp_nbsp/pxls.js",
 		"sharp": "^0.27.0",
-		"sodium": "^3.0.0",
-		"uws": "^200.0.0"
+		"uws": "^200.0.0",
+		"zlib-sync": "^0.1.0",
+		"utf-8-validate": "^5.0.0"
 	},
 	"devDependencies": {
 		"eslint": "^7.0.0",
 		"mocha": "^8.0.0"
 	},
 	"engines": {
-		"node": ">=10.0.0"
+		"node": ">=12.0.0"
 	},
 	"private": true
 }
