@@ -1,16 +1,19 @@
-const { Interval, sum } = require("./util");
+import { Interval, sum } from "./util";
 
-module.exports = class Histiore {
+export default class Histiore {
+	private data: Uint16Array;
+	private lastWriteTime: number;
+
 	constructor(period = Interval.DAY * 7) {
-		this._data = new Uint16Array(period / Interval.MINUTE);
-		this._lastWriteTime = Date.now();
+		this.data = new Uint16Array(period / Interval.MINUTE);
+		this.lastWriteTime = Date.now();
 	}
 
 	_addressAstral(time = Date.now()) {
 		return Math.floor(time / Interval.MINUTE);
 	}
 
-	_addressAstralToReal(address) {
+	_addressAstralToReal(address: number) {
 		return address % this.data.length;
 	}
 
@@ -19,7 +22,7 @@ module.exports = class Histiore {
 	}
 
 	_clearOldData(now = Date.now(), clearValue = 0) {
-		const lastAddress = this._addressAstral(this._lastWriteTime);
+		const lastAddress = this._addressAstral(this.lastWriteTime);
 		const currentAddress = this._addressAstral(Date.now());
 
 		if(lastAddress < currentAddress) {
@@ -75,7 +78,7 @@ module.exports = class Histiore {
 			}
 		}
 
-		this._lastWriteTime = now;
+		this.lastWriteTime = now;
 	}
 
 	hit() {
@@ -91,7 +94,7 @@ module.exports = class Histiore {
 		return this.data[address];
 	}
 
-	range(start, end = Date.now()) {
+	range(start: number, end = Date.now()) {
 		this._clearOldData(Date.now());
 
 		let startAddress = this._addressAstral(start);
@@ -111,7 +114,6 @@ module.exports = class Histiore {
 			// the range covers data that hits the end of the buffer
 			// and wraps back to the start.
 
-			console.debug(startRealAddress, endRealAddress);
 			const startData = this.data.subarray(startRealAddress);
 			const endData = this.data.subarray(0, endRealAddress);
 
@@ -124,16 +126,16 @@ module.exports = class Histiore {
 		}
 	}
 
-	recentHits(period) {
+	recentHits(period: number) {
 		const now = Date.now();
 		return this.range(now - period, now).reduce(sum);
 	}
 
-	backfill(data, dataTime, newHits, newTime) {
+	backfill(data: Uint16Array, dataTime: number, newHits: number, newTime: number) {
 		data.slice(0, this.data.length)
 			.forEach((value, i) => this.data[i] = value);
 
-		this._lastWriteTime = dataTime;
+		this.lastWriteTime = dataTime;
 
 		const cells = this._addressAstral(newTime) - this._addressAstral(dataTime);
 
@@ -144,7 +146,7 @@ module.exports = class Histiore {
 		this._clearOldData(newTime, Math.floor(hitsPerCell));
 	}
 
-	get data() {
-		return this._data;
+	copyData() {
+		return new Uint16Array(this.data);
 	}
-};
+}

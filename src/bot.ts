@@ -1,27 +1,28 @@
-const path = require("path");
-const util = require("util");
+import * as path from "path";
+import * as util from "util";
 
-const { Client, Intents } = require("discord.js");
-const chalk = require("chalk");
-const Pxls = require("pxls");
+import { Client, Intents } from "discord.js";
+import * as chalk from "chalk";
+import Pxls = require("pxls");
 
-const ServerHandler = require("./server");
-const Repl = require("./repl");
-const commands = require("./commands");
+import ServerHandler from "./server";
+import Repl from "./repl";
+import commands from "./commands";
 
-require("./overrides.js");
-
+/* eslint-disable-next-line @typescript-eslint/no-var-requires */
 const config = require(path.resolve(__dirname, "..", "config.json"));
 
-const LogLevel = {
-	"LOG": 0,
-	"INFO": 1,
-	"ERROR": 2,
-	"WARN": 3,
-	"DEBUG": 4
-};
+enum LogLevel {
+	LOG = 0,
+	INFO = 1,
+	ERROR = 2,
+	WARN = 3,
+	DEBUG = 4,
+}
 
-const loglevel = (typeof config.loglevel === "number" ? config.loglevel : LogLevel[config.loglevel]) || LogLevel.ERROR;
+const loglevel: LogLevel = (typeof config.loglevel === "number"
+	? config.loglevel
+	: LogLevel[config.loglevel.toString().toUpperCase()]);
 
 const replServer = new Repl(loglevel);
 
@@ -39,10 +40,14 @@ const fairy = new Client({ "intents": [
 ] });
 const pxls = new Pxls();
 
-const SERVERS = new Map();
+const SERVERS: Map<string, ServerHandler> = new Map();
 const init = async () => {
+	if(fairy.application === null) {
+		throw new Error("https://www.youtube.com/watch?v=2-NRYjSpVAU");
+	}
+
 	const application = await fairy.application.fetch();
-	await Promise.all(commands.map(async (name, command) => {
+	await Promise.all(Array.from(commands.entries()).map(async ([name, command]) => {
 		await application.commands.fetch();
 		const applicationCommand = application.commands.cache.find(c => c.name === name);
 		if(!applicationCommand) {
@@ -73,7 +78,7 @@ const init = async () => {
 let first = true;
 let discordUp = false;
 let pxlsUp = false;
-const set = (d, p) => {
+const set = (d: boolean, p: boolean) => {
 	const bad = (!d || !p) && discordUp && pxlsUp;
 
 	if(d !== discordUp) {
@@ -169,8 +174,10 @@ pxls.on("pixel", p => {
 
 const update = async () => {
 	try {
-		if(!pxlsUp) return;
-		await Promise.all(SERVERS.mapValues(server => server.updateSummaries()));
+		if(!pxlsUp) {
+			return;
+		}
+		await Promise.all(Array.from(SERVERS.values()).map((server) => server.updateSummaries()));
 	} catch(e) {
 		console.error("Couldn't update all summaries:", e);
 	}
@@ -185,6 +192,6 @@ replServer.context.servers = SERVERS;
 replServer.context.commands = commands;
 
 replServer.on("exit", async () => {
-	await Promise.all(SERVERS.mapValues(server => server.save()));
+	await Promise.all(Array.from(SERVERS.values()).map((server) => server.save()));
 	process.exit();
 });

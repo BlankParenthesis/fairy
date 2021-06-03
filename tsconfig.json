@@ -1,0 +1,19 @@
+{
+	"compilerOptions": {
+		"lib": ["ES2020",],
+		"target": "ES2020",
+		"module": "commonjs",
+        "moduleResolution": "node",
+		"noImplicitAny": true,
+		"preserveConstEnums": true,
+		"allowJs": false,
+		"strict": true,
+		"strictPropertyInitialization": false,
+		"outDir": "./lib",
+		"skipLibCheck": true
+	},
+	"files": ["src/bot.ts"],
+	"exclude": [
+		"node_modules/*"
+	]
+}
