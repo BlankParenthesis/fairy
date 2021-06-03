@@ -6,7 +6,10 @@ import {
 	GuildApplicationCommandManager,
 	ApplicationCommandOptionData,
 	GuildMember,
-	CommandInteractionOption
+	CommandInteractionOption,
+	Message,
+	APIMessage,
+	Collection,
 } from "discord.js";
 
 const { ApplicationCommandOptionTypes } = Constants;
@@ -52,13 +55,22 @@ const PRIVILEGED = [Permissions.FLAGS.MANAGE_GUILD, Permissions.FLAGS.ADMINISTRA
 
 const memberIsMod = (member: GuildMember) => member.permissions.has(PRIVILEGED);
 
-const LACKS_PERMISSIONS_RESPONSE = "“Manage Server” permission required.";
+const NON_GUILD_MEMBER_RESPONSE = "Commands must be used by a server member";
+const LACKS_PERMISSIONS_RESPONSE = "“Manage Server” permission required";
 
 const requireStringOption = (command: CommandInteractionOption, index = 0) => {
 	if(typeof command.options === "undefined") {
 		throw new Error("Internal Discord command malformed");
 	}
-	const option = command.options[index].value;
+	if(!(command.options instanceof Collection)) {
+		throw new Error("Internal Discord command format unknown");
+	}
+
+	const options = Array.from(command.options.values());
+	if(!(index in options)) {
+		throw new Error(`Internal invalid command index: ${index}`);
+	}
+	const option = options[index].value;
 	if(typeof option !== "string") {
 		throw new Error("Internal Discord command malformed");
 	}
@@ -115,12 +127,16 @@ export default new Map([
 			]
 		}
 	], async (interaction, server) => {
-		if(!memberIsMod(interaction.member)) {
+		if(interaction.member === null) {
+			throw new Error(NON_GUILD_MEMBER_RESPONSE);
+		}
+		
+		if(!memberIsMod(interaction.member as GuildMember)) {
 			await interaction.reply(LACKS_PERMISSIONS_RESPONSE);
 			return;
 		}
 
-		const [subCommand] = interaction.options;
+		const [subCommand] = interaction.options.values();
 
 		if(subCommand.name === "add") {
 			await interaction.defer();
@@ -182,12 +198,16 @@ export default new Map([
 			]
 		}
 	], async (interaction, server) => {
-		if(!memberIsMod(interaction.member)) {
+		if(interaction.member === null) {
+			throw new Error(NON_GUILD_MEMBER_RESPONSE);
+		}
+
+		if(!memberIsMod(interaction.member as GuildMember)) {
 			await interaction.reply(LACKS_PERMISSIONS_RESPONSE);
 			return;
 		}
 
-		const [subCommand] = interaction.options;
+		const [subCommand] = interaction.options.values();
 
 		if(subCommand.name === "post") {
 			const templatesInput = requireStringOption(subCommand);
@@ -197,6 +217,12 @@ export default new Map([
 
 			await interaction.reply(embed);
 			const message = await interaction.fetchReply();
+
+			const castToMessage = (message: any): message is Message => message instanceof Message;
+
+			if(!castToMessage(message)) {
+				throw new Error("Internal assertion failed: reply message is of wrong type");
+			}
 
 			await server.addSummary(message, templates);
 		} else if(subCommand.name === "edit") {

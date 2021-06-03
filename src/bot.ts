@@ -148,6 +148,8 @@ fairy.on("interaction", async interaction => {
 				} catch(e) {
 					const errorResponse = `Problem: ${e.message}.`;
 
+					console.debug(e);
+
 					if(interaction.replied || interaction.deferred) {
 						await interaction.editReply(errorResponse);
 					} else {

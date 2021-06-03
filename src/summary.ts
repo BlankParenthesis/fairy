@@ -60,7 +60,7 @@ export default class Summary {
 			return null;
 		}
 
-		const channel = guild.channels.cache.get(data.channel as string);
+		const channel = guild.channels.cache.get(data.channel as any);
 		if(typeof channel === "undefined") {
 			console.warn(`Malformed channel for summary in guild ${guild.id}`);
 			return null;
@@ -73,15 +73,11 @@ export default class Summary {
 
 		const textChannel = channel as TextChannel;
 
-		let message;
+		let message: Message;
 		try {
-			message = await textChannel.messages.fetch(data.message as string);
-
-			if(message === null) {
-				console.warn(`Missing message for summary in guild ${guild.id}`);
-				return null;
-			}
+			message = await textChannel.messages.fetch(data.message as any);
 		} catch(e) {
+			// TODO: as with in updates, check if this error is perhaps temporary
 			console.warn(`Unable to fetch message for summary in guild ${guild.id}`);
 			return null;
 		}
