@@ -1,6 +1,4 @@
 {
 	"loglevel": "DEBUG",
-	"token": "abcdef.123.456789",
-	"guildid": "441322787525885978",
-	"admins": []
+	"token": "abcdef.123.456789"
 }
