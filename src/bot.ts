@@ -26,6 +26,9 @@ const loglevel: LogLevel = (typeof config.loglevel === "number"
 
 const replServer = new Repl(loglevel);
 
+// this is async, so it won't happen immediately
+replServer.setupHistory();
+
 console.log = (...s) => loglevel >= LogLevel.LOG ? s.forEach(o => replServer.output(typeof o === "string" ? o : util.inspect(o))) : null;
 console.info = (...s) => loglevel >= LogLevel.INFO ? s.forEach(o => replServer.output(`ℹ ${typeof o === "string" ? o : util.inspect(o)}`, chalk.white)) : null;
 console.error = (...s) => loglevel >= LogLevel.ERROR ? s.forEach(o => replServer.output(`🚫 ${typeof o === "string" ? o : util.inspect(o)}`, chalk.redBright)) : null;
@@ -187,11 +190,13 @@ const update = async () => {
 
 setInterval(update, 60000);
 
-replServer.context.fairy = fairy;
-replServer.context.pxls = pxls;
-replServer.context.update = update;
-replServer.context.servers = SERVERS;
-replServer.context.commands = commands;
+replServer.on("setupContext", context => {
+	context.fairy = fairy;
+	context.pxls = pxls;
+	context.update = update;
+	context.servers = SERVERS;
+	context.commands = commands;
+});
 
 replServer.on("exit", async () => {
 	await Promise.all(Array.from(SERVERS.values()).map((server) => server.save()));
