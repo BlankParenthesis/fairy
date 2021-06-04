@@ -1,6 +1,6 @@
 import ServerHandler from "./server";
 import { MessageEmbed, Message, Guild, TextChannel, DiscordAPIError } from "discord.js";
-import { isObject, hasProperty, sleep, Interval } from "./util";
+import { isObject, hasProperty, sleep, Interval, isUndefined } from "./util";
 
 export default class Summary {
 	private readonly serverHandler: ServerHandler;
@@ -61,7 +61,7 @@ export default class Summary {
 		}
 
 		const channel = guild.channels.cache.get(data.channel as any);
-		if(typeof channel === "undefined") {
+		if(isUndefined(channel)) {
 			console.warn(`Malformed channel for summary in guild ${guild.id}`);
 			return null;
 		}
@@ -74,7 +74,7 @@ export default class Summary {
 		const textChannel = channel as TextChannel;
 
 		let message: Message | undefined = undefined;
-		while(typeof message === "undefined") {
+		while(isUndefined(message)) {
 			try {
 				message = await textChannel.messages.fetch(data.message as any);
 			} catch(e) {

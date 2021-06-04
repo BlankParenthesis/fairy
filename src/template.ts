@@ -8,7 +8,7 @@ import Pxls = require("pxls");
 import Histoire from "./history";
 import { Interval } from "./util";
 
-import { humanTime, zip, hashParams, isObject, hasProperty } from "./util";
+import { humanTime, zip, hashParams, isObject, hasProperty, isUndefined } from "./util";
 
 const compressRGB = (arr: ArrayLike<number>) => (arr[0] << 16) | (arr[1] << 8) | arr[0];
 
@@ -82,10 +82,10 @@ const decodeTemplateImage = async (
 	const im = sharp(buffer);
 	const meta = await im.metadata();
 
-	if(typeof meta.width === "undefined") {
+	if(isUndefined(meta.width)) {
 		throw new Error("Template image defines no width");
 	}
-	if(typeof meta.height === "undefined") {
+	if(isUndefined(meta.height)) {
 		throw new Error("Template image defines no height");
 	}
 
@@ -406,14 +406,14 @@ export default class Template {
 		const template = params.get("template");
 		const tw = params.get("tw");
 
-		if(typeof template === "undefined") {
+		if(isUndefined(template)) {
 			throw new Error("Missing template source");
 		}
 
 		const { width, height, data } = await decodeTemplateImage(
 			mapPalette(pxls.palette), 
 			template,
-			typeof tw === "undefined" ? undefined : parseInt(tw)
+			isUndefined(tw) ? undefined : parseInt(tw)
 		);
 
 		const ox = params.get("ox");
@@ -421,8 +421,8 @@ export default class Template {
 
 		return new Template(
 			pxls, 
-			typeof ox === "undefined" ? 0 : parseInt(ox),
-			typeof oy === "undefined" ? 0 : parseInt(oy),
+			isUndefined(ox) ? 0 : parseInt(ox),
+			isUndefined(oy) ? 0 : parseInt(oy),
 			width, 
 			height, 
 			data, 
@@ -452,10 +452,10 @@ export default class Template {
 		const im = sharp(imagePath);
 		const { width, height } = await im.metadata();
 
-		if(typeof width === "undefined") {
+		if(isUndefined(width)) {
 			throw new Error("Template image defines no width");
 		}
-		if(typeof height === "undefined") {
+		if(isUndefined(height)) {
 			throw new Error("Template image defines no height");
 		}
 

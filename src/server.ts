@@ -7,7 +7,7 @@ import Pxls = require("pxls");
 import Summary from "./summary";
 import Template from "./template";
 
-import { hashParams, escapeRegExp, isObject, hasProperty } from "./util";
+import { hashParams, escapeRegExp, isObject, hasProperty, isUndefined } from "./util";
 
 export default class ServerHandler {
 	private pxls: Pxls;
@@ -28,7 +28,7 @@ export default class ServerHandler {
 		this.pxls.on("sync", async ({ metadata }) => {
 			const { canvasCode } = metadata;
 
-			if(typeof this.canvasCode === "undefined") {
+			if(isUndefined(this.canvasCode)) {
 				this.canvasCode = canvasCode;
 			}
 
@@ -123,7 +123,7 @@ export default class ServerHandler {
 	async load() {
 		// all the shenanigans with loadjob is just so that we can ensure
 		// that this server handler is loaded before use.
-		if(typeof this.loadjob === "undefined") {
+		if(isUndefined(this.loadjob)) {
 			this.loadjob = (async () => {
 				await this._ensureDirectories();
 
@@ -277,7 +277,7 @@ export default class ServerHandler {
 
 		const template = this.templates.get(name);
 
-		if(typeof template === "undefined") {
+		if(isUndefined(template)) {
 			return null;
 		}
 

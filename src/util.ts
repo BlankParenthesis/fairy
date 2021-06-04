@@ -73,8 +73,9 @@ function isObject<
 	return typeof object === "object" && object !== null;
 }
 
-// TODO: isUndefined
-// Maybe isString too
+function isUndefined(o: any): o is undefined {
+	return typeof o === "undefined";
+}
 
 export {
 	sleep,
@@ -85,5 +86,6 @@ export {
 	hashParams,
 	escapeRegExp,
 	hasProperty,
-	isObject
+	isObject,
+	isUndefined
 };

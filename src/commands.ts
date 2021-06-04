@@ -16,6 +16,7 @@ const { ApplicationCommandOptionTypes } = Constants;
 
 import Summary from "./summary";
 import Server from "./server";
+import { isUndefined } from "./util";
 
 class Command {
 	readonly name: string;
@@ -59,7 +60,7 @@ const NON_GUILD_MEMBER_RESPONSE = "Commands must be used by a server member";
 const LACKS_PERMISSIONS_RESPONSE = "“Manage Server” permission required";
 
 const requireStringOption = (command: CommandInteractionOption, index = 0) => {
-	if(typeof command.options === "undefined") {
+	if(isUndefined(command.options)) {
 		throw new Error("Internal Discord command malformed");
 	}
 	if(!(command.options instanceof Collection)) {
