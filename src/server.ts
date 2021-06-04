@@ -1,7 +1,7 @@
 import { promises as fs } from "fs";
 import * as path from "path";
 
-import { Guild, Message } from "discord.js";
+import { DiscordAPIError, Guild, Message } from "discord.js";
 import Pxls = require("pxls");
 
 import Summary from "./summary";
@@ -80,12 +80,13 @@ export default class ServerHandler {
 			try {
 				await s.update();
 			} catch(e) {
-				// TODO: check the error type
-				// and only drop if it indicates 404, 410, etc.
-				// If discord is just temporarily down, we currently drop all
-				// summaries for no good reason.
-				console.warn(`Dropping summary which failed to update: ${e.message}`);
-				this._forgetSummary(s);
+				if(e instanceof DiscordAPIError && [10003, 10004, 10008].includes(e.code)) {
+					// code 10003 is "Unknown channel"
+					// code 10004 is "Unknown guild" — we don't expect this but just in case…
+					// code 10008 is "Unknown message"
+					console.debug(`Dropping summary whose message seems deleted: ${e.message}`);
+					this._forgetSummary(s);
+				}
 			}
 		}));
 	}

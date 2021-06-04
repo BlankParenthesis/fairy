@@ -1,6 +1,6 @@
 import ServerHandler from "./server";
-import { MessageEmbed, Message, Guild, TextChannel } from "discord.js";
-import { isObject, hasProperty } from "./util";
+import { MessageEmbed, Message, Guild, TextChannel, DiscordAPIError } from "discord.js";
+import { isObject, hasProperty, sleep, Interval } from "./util";
 
 export default class Summary {
 	private readonly serverHandler: ServerHandler;
@@ -73,13 +73,26 @@ export default class Summary {
 
 		const textChannel = channel as TextChannel;
 
-		let message: Message;
-		try {
-			message = await textChannel.messages.fetch(data.message as any);
-		} catch(e) {
-			// TODO: as with in updates, check if this error is perhaps temporary
-			console.warn(`Unable to fetch message for summary in guild ${guild.id}`);
-			return null;
+		let message: Message | undefined = undefined;
+		while(typeof message === "undefined") {
+			try {
+				message = await textChannel.messages.fetch(data.message as any);
+			} catch(e) {
+				if(e instanceof DiscordAPIError && [10003, 10004, 10008].includes(e.code)) {
+					// code 10003 is "Unknown channel"
+					// code 10004 is "Unknown guild" — we don't expect this but just in case…
+					// code 10008 is "Unknown message"
+					console.debug(`Missing message for summary in guild ${guild.id}`);
+					return null;
+				}
+
+				// presume network error and try again in 30 seconds
+				console.warn(
+					`Failed to fetch message for summary in guild ${guild.id}: ${e.message}.\n`
+					+ "Will try again soon."
+				);
+				await sleep(Interval.SECOND * 30);
+			}
 		}
 
 		const { templates } = data;
