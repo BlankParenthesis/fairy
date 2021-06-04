@@ -25,7 +25,7 @@ export default class ServerHandler {
 		this.pxls = pxls;
 		this.guild = guild;
 
-		this.pxls.on("sync", ({ metadata }) => {
+		this.pxls.on("sync", async ({ metadata }) => {
 			const { canvasCode } = metadata;
 
 			if(typeof this.canvasCode === "undefined") {
@@ -33,7 +33,7 @@ export default class ServerHandler {
 			}
 
 			if(this.canvasCode !== canvasCode) {
-				this.reset();
+				await this.reset();
 				this.cleanUnusedTemplateFiles().catch(console.error);
 				this.save().catch(console.error);
 			}
@@ -219,9 +219,10 @@ export default class ServerHandler {
 		await Promise.all(waywardFiles.map(f => fs.unlink(f)));
 	}
 
-	reset() {
+	async reset() {
 		this.templates.clear();
-		this.summaries = [];
+		const summaries = this.summaries.splice(0);
+		await Promise.all(summaries.map(s => s.finalize()));
 	}
 
 	get id() {
