@@ -29,13 +29,20 @@ const determinePalleteInArea = (
 ) => {
 	const votes = (new Array(palette.size)).fill(0);
 
+	const lineLength = w * scale;
+	// the offset in the row
+	const subpixelX = (i % w) * scale;
+	// the start address of the row
+	const subpixelY = Math.floor(i / w) * lineLength * scale;
+
 	for(let x = 0; x < scale; x++) {
 		for(let y = 0; y < scale; y++) {
 			if(i === 0 && x === 0 && y === 0 && data[3] < 64) {
 				// Zoda's pxlsFiddle puts a special pixel here to determine the scale, don't count such a pixel as a vote
 				continue;
 			}
-			const subpixelAddresss = ((((i % w) * scale) + (Math.floor(i / w) * w * scale * scale) + x + (y * w * scale)) << 2);
+			// shift left (<< 2) multiplies by 4 — the number of bytes per pixel.
+			const subpixelAddresss = (subpixelX + subpixelY + x + (y * lineLength)) << 2;
 			if(data.readUInt8(subpixelAddresss + 3) === 0) {
 				// pixel is transparent
 				continue;
