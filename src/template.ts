@@ -139,6 +139,8 @@ export default class Template {
 
 	private lastCompletion: number;
 
+	static readonly transparentPixel = 255;
+
 	constructor(
 		pxls: Pxls, 
 		x: number, 
@@ -203,12 +205,12 @@ export default class Template {
 
 	goodPixel() {
 		this.histy.hit(1);
-		this.lastCompletion++;
+		this.lastCompletion += 1;
 	}
 
 	badPixel() {
 		this.croire.hit(1);
-		this.lastCompletion--;
+		this.lastCompletion -= 1;
 	}
 
 	private etaFromWindow(window: number, rate: number) {
@@ -238,7 +240,7 @@ export default class Template {
 			Interval.DAY,
 			Interval.DAY * 2,
 			Interval.DAY * 4,
-			Interval.DAY * 7
+			Interval.DAY * 7,
 		].filter(interval => interval < trackTime);
 
 		if(intervals.length === 0) {
@@ -278,7 +280,7 @@ export default class Template {
 			return {
 				estimate,
 				interval,
-				ratio
+				ratio,
 			};
 		}).reduce((a, b) => a.ratio < b.ratio ? a : b).estimate;
 	}
@@ -288,7 +290,7 @@ export default class Template {
 	}
 
 	at(x: number, y: number) {
-		return this.bounds(x, y) ? this.data[x - this.x + ((y - this.y) * this.width)] : 255;
+		return this.bounds(x, y) ? this.data[x - this.x + ((y - this.y) * this.width)] : Template.transparentPixel;
 	}
 
 	colorAt(x: number, y: number) {
@@ -296,7 +298,7 @@ export default class Template {
 	}
 
 	get size() {
-		return this.data.filter(b => b !== 255).length;
+		return this.data.filter(b => b !== Template.transparentPixel).length;
 	}
 
 	get badPixels() {
@@ -305,7 +307,7 @@ export default class Template {
 		for(let x = 0; x < this.width; x++) {
 			for(let y = 0; y < this.height; y++) {
 				const i = x + (y * this.width);
-				if(data[i][0] !== 255 && data[i][0] !== data[i][1]) {
+				if(data[i][0] !== Template.transparentPixel && data[i][0] !== data[i][1]) {
 					bads.push([x + this.x, y + this.y]);
 				}
 			}
@@ -314,7 +316,7 @@ export default class Template {
 	}
 
 	get rawProgress() {
-		return zip(this.data, this.shadow).filter(v => v[1] !== 255 && v[0] === v[1]).length;
+		return zip(this.data, this.shadow).filter(v => v[1] !== Template.transparentPixel && v[0] === v[1]).length;
 	}
 
 	get progress() {
@@ -328,10 +330,11 @@ export default class Template {
 		// rate in px/unit time (px/ms).
 		// 4 px/min is considered fast
 		const fast = 4 / Interval.MINUTE;
-		const ellipsize = badPixels.length > 4 ? "\n..." : "";
+		const maxExamples = 4;
+		const ellipsize = badPixels.length > maxExamples ? "\n..." : "";
 		const badPixelsSummary = badPixels.length > 0
 			? `\`\`\`css\n${
-				badPixels.slice(0, 4)
+				badPixels.slice(0, maxExamples)
 					.map(p => `[${p.join(",")}] should be ${this.colorAt(p[0], p[1])}`)
 					.join("\n")
 			}${ellipsize}\`\`\``
@@ -340,7 +343,7 @@ export default class Template {
 		const intervals = Object.entries({
 			"minute": Interval.MINUTE,
 			"hour": Interval.HOUR,
-			"day": Interval.DAY
+			"day": Interval.DAY,
 		}).map(([label, interval]) => {
 			const goodProgress = this.histy.recentHits(interval);
 			const badProgress = this.croire.recentHits(interval);
@@ -389,8 +392,6 @@ export default class Template {
 		const { palette } = this.pxls;
 		const { data } = this;
 		const len = data.length << 2;
-
-		rgba.fill(255);
 
 		for(let i = 0; i < len; i += 4) {
 			if(palette[data[i >> 2]]) {
@@ -493,21 +494,20 @@ export default class Template {
 		);
 	}
 
-
 	get persistent() {
 		const { x, y, started } = this;
 		const history = {
 			"good": Array.from(this.histy.copyData()),
 			"bad": Array.from(this.croire.copyData()),
 			"timestamp": Date.now(),
-			"progress": this.rawProgress
+			"progress": this.rawProgress,
 		};
 
 		return {
 			x,
 			y,
 			started,
-			history
+			history,
 		};
 	}
 }

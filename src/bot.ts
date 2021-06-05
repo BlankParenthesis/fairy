@@ -9,6 +9,8 @@ import ServerHandler from "./server";
 import Repl from "./repl";
 import commands from "./commands";
 
+import { Interval } from "./util";
+
 /* eslint-disable-next-line @typescript-eslint/no-var-requires */
 const config = require(path.resolve(__dirname, "..", "config.json"));
 
@@ -39,7 +41,7 @@ console.log(chalk.white("🧚 Please wait..."));
 
 const fairy = new Client({ "intents": [
 	Intents.FLAGS.GUILDS,
-	Intents.FLAGS.GUILD_MEMBERS
+	Intents.FLAGS.GUILD_MEMBERS,
 ] });
 const pxls = new Pxls();
 
@@ -188,7 +190,7 @@ const update = async () => {
 	}
 };
 
-setInterval(update, 60000);
+setInterval(update, 60 * Interval.SECOND);
 
 replServer.on("setupContext", context => {
 	context.fairy = fairy;

@@ -9,7 +9,7 @@ export default class Histiore {
 		this.lastWriteTime = Date.now();
 	}
 
-	private addressAstral(time = Date.now()) {
+	private static addressAstral(time = Date.now()) {
 		return Math.floor(time / Interval.MINUTE);
 	}
 
@@ -18,12 +18,12 @@ export default class Histiore {
 	}
 
 	private addressReal(time = Date.now()) {
-		return this.addressAstralToReal(this.addressAstral(time));
+		return this.addressAstralToReal(Histiore.addressAstral(time));
 	}
 
 	private fillData(addValue: number, now = Date.now()) {
-		let lastAddress = this.addressAstral(this.lastWriteTime);
-		const currentAddress = this.addressAstral(now);
+		let lastAddress = Histiore.addressAstral(this.lastWriteTime);
+		const currentAddress = Histiore.addressAstral(now);
 
 		const currentRealAddress = this.addressAstralToReal(currentAddress);
 
@@ -32,7 +32,6 @@ export default class Histiore {
 			// this means it probably contains some old data.
 		
 			const cells = currentAddress - lastAddress;
-
 
 			const values = (function* (total: number, count: number): Generator<number, void, number | undefined> {
 				const quotient = Math.floor(total / count);
@@ -147,8 +146,8 @@ export default class Histiore {
 	}
 
 	range(start: number, end = Date.now()) {
-		let startAddress = this.addressAstral(start);
-		const endAddress = this.addressAstral(end);
+		let startAddress = Histiore.addressAstral(start);
+		const endAddress = Histiore.addressAstral(end);
 
 		if((endAddress - startAddress) > this.data.length) {
 			// we don't have enough data to fulfill the requested range

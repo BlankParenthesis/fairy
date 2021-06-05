@@ -1,5 +1,5 @@
 import ServerHandler from "./server";
-import { MessageEmbed, Message, Guild, TextChannel, DiscordAPIError } from "discord.js";
+import { MessageEmbed, Message, Guild, TextChannel, DiscordAPIError, Constants } from "discord.js";
 import { isObject, hasProperty, sleep, Interval, isUndefined } from "./util";
 
 export default class Summary {
@@ -78,10 +78,11 @@ export default class Summary {
 			try {
 				message = await textChannel.messages.fetch(data.message as any);
 			} catch(e) {
-				if(e instanceof DiscordAPIError && [10003, 10004, 10008].includes(e.code)) {
-					// code 10003 is "Unknown channel"
-					// code 10004 is "Unknown guild" — we don't expect this but just in case…
-					// code 10008 is "Unknown message"
+				if(e instanceof DiscordAPIError && [
+					Constants.APIErrors.UNKNOWN_GUILD, // we don't expect this but just in case…
+					Constants.APIErrors.UNKNOWN_CHANNEL, 
+					Constants.APIErrors.UNKNOWN_MESSAGE, 
+				].includes(e.code as any)) {
 					console.debug(`Missing message for summary in guild ${guild.id}`);
 					return null;
 				}
@@ -109,7 +110,7 @@ export default class Summary {
 		return {
 			"channel": this.message.channel.id,
 			"message": this.message.id,
-			"templates": this.templates
+			"templates": this.templates,
 		};
 	}
 }

@@ -47,7 +47,10 @@ class Command {
 		const { name, description, options, defaultPermission } = this;
 
 		await commandManager.create({
-			name, description, options, defaultPermission
+			name, 
+			description, 
+			options, 
+			defaultPermission,
 		});
 	}
 }
@@ -110,9 +113,9 @@ export default new Map([
 					"type": ApplicationCommandOptionTypes.STRING,
 					"name": "template-url",
 					"description": "A template url.",
-					"required": true
-				}
-			]
+					"required": true,
+				},
+			],
 		},
 		{
 			"type": ApplicationCommandOptionTypes.SUB_COMMAND,
@@ -123,10 +126,10 @@ export default new Map([
 					"type": ApplicationCommandOptionTypes.STRING,
 					"name": "template-name",
 					"description": "A tracked template name.",
-					"required": true
-				}
-			]
-		}
+					"required": true,
+				},
+			],
+		},
 	], async (interaction, server) => {
 		if(interaction.member === null) {
 			throw new Error(NON_GUILD_MEMBER_RESPONSE);
@@ -162,9 +165,9 @@ export default new Map([
 					"type": ApplicationCommandOptionTypes.STRING,
 					"name": "template-names",
 					"description": "A list of template names. Separated by commas.",
-					"required": true
-				}
-			]
+					"required": true,
+				},
+			],
 		},
 		{
 			"type": ApplicationCommandOptionTypes.SUB_COMMAND,
@@ -175,15 +178,15 @@ export default new Map([
 					"type": ApplicationCommandOptionTypes.STRING,
 					"name": "summary-message",
 					"description": "The ID of the summary message or a link to it.",
-					"required": true
+					"required": true,
 				},
 				{
 					"type": ApplicationCommandOptionTypes.STRING,
 					"name": "template-names",
 					"description": "A list of template names. Separated by commas.",
-					"required": true
-				}
-			]
+					"required": true,
+				},
+			],
 		},
 		{
 			"type": ApplicationCommandOptionTypes.SUB_COMMAND,
@@ -194,10 +197,10 @@ export default new Map([
 					"type": ApplicationCommandOptionTypes.STRING,
 					"name": "summary-message",
 					"description": "The ID of the summary message or a link to it.",
-					"required": true
-				}
-			]
-		}
+					"required": true,
+				},
+			],
+		},
 	], async (interaction, server) => {
 		if(interaction.member === null) {
 			throw new Error(NON_GUILD_MEMBER_RESPONSE);
@@ -256,5 +259,5 @@ export default new Map([
 
 			interaction.reply("Summary will no longer update.", { "ephemeral": true });
 		}
-	})
+	}),
 ].map(c => [c.name, c]));

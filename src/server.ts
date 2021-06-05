@@ -1,7 +1,7 @@
 import { promises as fs } from "fs";
 import * as path from "path";
 
-import { DiscordAPIError, Guild, Message } from "discord.js";
+import { DiscordAPIError, Guild, Message, Constants } from "discord.js";
 import Pxls = require("pxls");
 
 import Summary from "./summary";
@@ -49,7 +49,7 @@ export default class ServerHandler {
 	pixel(x: number, y: number, color: number, oldColor: number) {
 		for(const template of this.templates.values()) {
 			const templateColor = template.at(x, y);
-			if(templateColor === 255) {
+			if(templateColor === Template.transparentPixel) {
 				return;
 			}
 
@@ -84,10 +84,11 @@ export default class ServerHandler {
 			try {
 				await s.update();
 			} catch(e) {
-				if(e instanceof DiscordAPIError && [10003, 10004, 10008].includes(e.code)) {
-					// code 10003 is "Unknown channel"
-					// code 10004 is "Unknown guild" — we don't expect this but just in case…
-					// code 10008 is "Unknown message"
+				if(e instanceof DiscordAPIError && [
+					Constants.APIErrors.UNKNOWN_GUILD, // we don't expect this but just in case…
+					Constants.APIErrors.UNKNOWN_CHANNEL, 
+					Constants.APIErrors.UNKNOWN_MESSAGE, 
+				].includes(e.code as any)) {
 					console.debug(`Dropping summary whose message seems deleted: ${e.message}`);
 					this._forgetSummary(s);
 				}
@@ -200,7 +201,7 @@ export default class ServerHandler {
 
 	async _ensureDirectories() {
 		await Promise.all([
-			this.templateDir
+			this.templateDir,
 		].map(d => fs.mkdir(d, { "recursive": true })));
 	}
 
@@ -250,7 +251,7 @@ export default class ServerHandler {
 			"templates": Object.fromEntries(Array.from(this.templates.entries())
 				.map(([name, template]) => [name, template.persistent])),
 			"summaries": this.summaries.map(s => s.persistent),
-			"canvasCode": this.canvasCode
+			"canvasCode": this.canvasCode,
 		};
 	}
 
@@ -275,7 +276,7 @@ export default class ServerHandler {
 	findTemplate(searchString: string) {
 		const name = this._findTemplateNameInString(searchString) || this._findTemplateNameWithString(searchString);
 
-		if(name == null) {
+		if(name === null) {
 			return null;
 		}
 

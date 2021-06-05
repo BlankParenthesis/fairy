@@ -1,19 +1,19 @@
 const sleep = (t: number) => new Promise(resolve => setTimeout(resolve, t));
 
 const humanTime = (t: number) => {
-	let time = t / 1000; //seconds
+	let time = t / 1000; // seconds
 	if(time < 120) {
 		return `${Math.round(time)} second${Math.round(time) === 1 ? "" : "s"}`;
 	}
-	time /= 60; //minutes
+	time /= 60; // minutes
 	if(time < 180) {
 		return `${Math.round(time)} minute${Math.round(time) === 1 ? "" : "s"}`;
 	}
-	time /= 60; //hours
+	time /= 60; // hours
 	if(time < 48) {
 		return `${Math.round(time)} hour${Math.round(time) === 1 ? "" : "s"}`;
 	}
-	time /= 24; //days
+	time /= 24; // days
 	return `${Math.round(time)} day${Math.round(time) === 1 ? "" : "s"}`;
 };
 
@@ -36,7 +36,7 @@ const Interval = (() => {
 		SECOND,
 		MINUTE,
 		HOUR,
-		DAY
+		DAY,
 	};
 })();
 
@@ -55,27 +55,20 @@ const hashParams = (url: string) => {
 
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-function hasProperty<
+const hasProperty = <
 	X extends {}, 
 	Y extends PropertyKey
->(
-	object: X, 
-	property: Y
-): object is X & Record<Y, unknown> {
+>(object: X, property: Y): object is X & Record<Y, unknown> => {
 	return Object.prototype.hasOwnProperty.call(object, property);
-}
+};
 
-function isObject<
-	X extends {}
->(
-	object: unknown
-): object is X {
+const isObject = <X extends {}>(object: unknown): object is X => {
 	return typeof object === "object" && object !== null;
-}
+};
 
-function isUndefined(o: any): o is undefined {
+const isUndefined = (o: any): o is undefined => {
 	return typeof o === "undefined";
-}
+};
 
 export {
 	sleep,
@@ -87,5 +80,5 @@ export {
 	escapeRegExp,
 	hasProperty,
 	isObject,
-	isUndefined
+	isUndefined,
 };
