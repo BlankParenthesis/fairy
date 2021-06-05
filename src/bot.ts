@@ -190,7 +190,14 @@ const update = async () => {
 	}
 };
 
-setInterval(update, 60 * Interval.SECOND);
+const msUntilMinuteEpoch = (60 - (new Date()).getSeconds()) * 1000;
+setTimeout(
+	() => {
+		setInterval(update, 60 * Interval.SECOND);
+		update();
+	},
+	msUntilMinuteEpoch + 3 * Interval.SECOND
+);
 
 replServer.on("setupContext", context => {
 	context.fairy = fairy;
