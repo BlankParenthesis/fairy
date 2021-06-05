@@ -7,7 +7,7 @@ import Pxls = require("pxls");
 import Summary from "./summary";
 import Template from "./template";
 
-import { hashParams, escapeRegExp, isObject, hasProperty, isUndefined } from "./util";
+import { hashParams, escapeRegExp, isObject, hasProperty, isUndefined, isString } from "./util";
 
 export default class ServerHandler {
 	private pxls: Pxls;
@@ -155,7 +155,7 @@ export default class ServerHandler {
 						: [];
 
 					this.canvasCode = hasProperty(persistentData, "canvasCode")
-							&& typeof persistentData.canvasCode === "string"
+							&& isString(persistentData.canvasCode)
 						? persistentData.canvasCode
 						: this.pxls.canvasCode;
 

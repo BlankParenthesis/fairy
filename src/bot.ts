@@ -9,7 +9,7 @@ import ServerHandler from "./server";
 import Repl from "./repl";
 import commands from "./commands";
 
-import { Interval } from "./util";
+import { Interval, isUndefined, isString, isNumber } from "./util";
 
 /* eslint-disable-next-line @typescript-eslint/no-var-requires */
 const config = require(path.resolve(__dirname, "..", "config.json"));
@@ -22,20 +22,20 @@ enum LogLevel {
 	DEBUG = 4,
 }
 
-const loglevel: LogLevel = (typeof config.loglevel === "number"
+const loglevel: LogLevel = isNumber(config.loglevel)
 	? config.loglevel
-	: LogLevel[config.loglevel.toString().toUpperCase()]);
+	: LogLevel[config.loglevel.toString().toUpperCase()];
 
 const replServer = new Repl(loglevel);
 
 // this is async, so it won't happen immediately
 replServer.setupHistory();
 
-console.log = (...s) => loglevel >= LogLevel.LOG ? s.forEach(o => replServer.output(typeof o === "string" ? o : util.inspect(o))) : null;
-console.info = (...s) => loglevel >= LogLevel.INFO ? s.forEach(o => replServer.output(`ℹ ${typeof o === "string" ? o : util.inspect(o)}`, chalk.white)) : null;
-console.error = (...s) => loglevel >= LogLevel.ERROR ? s.forEach(o => replServer.output(`🚫 ${typeof o === "string" ? o : util.inspect(o)}`, chalk.redBright)) : null;
-console.warn = (...s) => loglevel >= LogLevel.WARN ? s.forEach(o => replServer.output(`⚠  ${typeof o === "string" ? o : util.inspect(o)}`, chalk.yellow)) : null;
-console.debug = (...s) => loglevel >= LogLevel.DEBUG ? s.forEach(o => replServer.output(`🐛 ${typeof o === "string" ? o : util.inspect(o)}`, chalk.gray)) : null;
+console.log = (...s) => loglevel >= LogLevel.LOG ? s.forEach(o => replServer.output(isString(o) ? o : util.inspect(o))) : null;
+console.info = (...s) => loglevel >= LogLevel.INFO ? s.forEach(o => replServer.output(`ℹ ${isString(o) ? o : util.inspect(o)}`, chalk.white)) : null;
+console.error = (...s) => loglevel >= LogLevel.ERROR ? s.forEach(o => replServer.output(`🚫 ${isString(o) ? o : util.inspect(o)}`, chalk.redBright)) : null;
+console.warn = (...s) => loglevel >= LogLevel.WARN ? s.forEach(o => replServer.output(`⚠  ${isString(o) ? o : util.inspect(o)}`, chalk.yellow)) : null;
+console.debug = (...s) => loglevel >= LogLevel.DEBUG ? s.forEach(o => replServer.output(`🐛 ${isString(o) ? o : util.inspect(o)}`, chalk.gray)) : null;
 
 console.log(chalk.white("🧚 Please wait..."));
 
@@ -140,7 +140,7 @@ fairy.on("guildDelete", guild => {
 fairy.on("interaction", async interaction => {
 	if(interaction.isCommand()) {
 		const command = commands.get(interaction.commandName);
-		if(typeof command !== "undefined") {
+		if(!isUndefined(command)) {
 			if(interaction.guildID) {
 				const server = SERVERS.get(interaction.guildID);
 

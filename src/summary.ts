@@ -1,6 +1,6 @@
 import ServerHandler from "./server";
 import { MessageEmbed, Message, Guild, TextChannel, DiscordAPIError, Constants } from "discord.js";
-import { isObject, hasProperty, sleep, Interval, isUndefined } from "./util";
+import { isObject, hasProperty, sleep, Interval, isUndefined, isString } from "./util";
 
 export default class Summary {
 	private readonly serverHandler: ServerHandler;
@@ -103,7 +103,7 @@ export default class Summary {
 			return null;
 		}
 
-		return new Summary(serverHandler, message, templates.filter(s => typeof s === "string"));
+		return new Summary(serverHandler, message, templates.filter(s => isString(s)));
 	}
 
 	get persistent() {

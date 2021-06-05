@@ -16,7 +16,7 @@ const { ApplicationCommandOptionTypes } = Constants;
 
 import Summary from "./summary";
 import Server from "./server";
-import { isUndefined } from "./util";
+import { isUndefined, isString } from "./util";
 
 class Command {
 	readonly name: string;
@@ -75,7 +75,7 @@ const requireStringOption = (command: CommandInteractionOption, index = 0) => {
 		throw new Error(`Internal invalid command index: ${index}`);
 	}
 	const option = options[index].value;
-	if(typeof option !== "string") {
+	if(!isString(option)) {
 		throw new Error("Internal Discord command malformed");
 	}
 	return option;

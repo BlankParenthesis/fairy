@@ -70,6 +70,14 @@ const isUndefined = (o: any): o is undefined => {
 	return typeof o === "undefined";
 };
 
+const isString = (o: any): o is string => {
+	return typeof o === "string";
+};
+
+const isNumber = (o: any): o is number => {
+	return typeof o === "number";
+};
+
 export {
 	sleep,
 	humanTime,
@@ -81,4 +89,6 @@ export {
 	hasProperty,
 	isObject,
 	isUndefined,
+	isString,
+	isNumber,
 };

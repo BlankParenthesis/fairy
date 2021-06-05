@@ -8,7 +8,7 @@ import Pxls = require("pxls");
 import Histoire from "./history";
 import { Interval } from "./util";
 
-import { humanTime, zip, hashParams, isObject, hasProperty, isUndefined } from "./util";
+import { humanTime, zip, hashParams, isObject, hasProperty, isUndefined, isNumber } from "./util";
 
 const compressRGB = (arr: ArrayLike<number>) => (arr[0] << 16) | (arr[1] << 8) | arr[0];
 
@@ -96,7 +96,7 @@ const decodeTemplateImage = async (
 		throw new Error("Template image defines no height");
 	}
 
-	const ratio = typeof tw !== "undefined" && tw > 0 ? meta.width / tw : 1;
+	const ratio = (!isUndefined(tw) && tw > 0) ? meta.width / tw : 1;
 	if(ratio !== Math.round(ratio)) {
 		throw new Error("Refusing to process template with non-integer scale");
 	}
@@ -162,7 +162,7 @@ export default class Template {
 		const now = Date.now();
 
 		if(isObject(historicalData)) {
-			if(hasProperty(historicalData, "progress") && typeof historicalData.progress === "number") {
+			if(hasProperty(historicalData, "progress") && isNumber(historicalData.progress)) {
 				this.lastCompletion = historicalData.progress;
 			} else {
 				this.lastCompletion = this.rawProgress;
@@ -171,7 +171,7 @@ export default class Template {
 			if(hasProperty(historicalData, "good") && Array.isArray(historicalData.good)) {
 				const data = new Uint16Array(historicalData.good);
 
-				if(hasProperty(historicalData, "timestamp") && typeof historicalData.timestamp === "number") {
+				if(hasProperty(historicalData, "timestamp") && isNumber(historicalData.timestamp)) {
 					this.histy.backfill(data, historicalData.timestamp);
 				} else {
 					this.histy.backfill(data, now);
@@ -181,7 +181,7 @@ export default class Template {
 			if(hasProperty(historicalData, "bad") && Array.isArray(historicalData.bad)) {
 				const data = new Uint16Array(historicalData.bad);
 
-				if(hasProperty(historicalData, "timestamp") && typeof historicalData.timestamp === "number") {
+				if(hasProperty(historicalData, "timestamp") && isNumber(historicalData.timestamp)) {
 					this.croire.backfill(data, historicalData.timestamp);
 				} else {
 					this.croire.backfill(data, now);
@@ -449,13 +449,13 @@ export default class Template {
 		if(!isObject(persistentData)) {
 			throw new Error("Invalid template data");
 		}
-		if(!hasProperty(persistentData, "x") || typeof persistentData.x !== "number") {
+		if(!hasProperty(persistentData, "x") || !isNumber(persistentData.x)) {
 			throw new Error("Invalid template x position");
 		}
-		if(!hasProperty(persistentData, "y") || typeof persistentData.y !== "number") {
+		if(!hasProperty(persistentData, "y") || !isNumber(persistentData.y)) {
 			throw new Error("Invalid template y position");
 		}
-		if(!hasProperty(persistentData, "started") || typeof persistentData.started !== "number") {
+		if(!hasProperty(persistentData, "started") || !isNumber(persistentData.started)) {
 			throw new Error("Invalid template start time");
 		}
 		if(!hasProperty(persistentData, "history")) {
