@@ -1,3 +1,4 @@
+import is = require("check-types");
 import { 
 	Constants, 
 	Permissions, 
@@ -16,7 +17,6 @@ const { ApplicationCommandOptionTypes } = Constants;
 
 import Summary from "./summary";
 import Server from "./server";
-import { isUndefined, isString } from "./util";
 
 class Command {
 	readonly name: string;
@@ -63,7 +63,7 @@ const NON_GUILD_MEMBER_RESPONSE = "Commands must be used by a server member";
 const LACKS_PERMISSIONS_RESPONSE = "“Manage Server” permission required";
 
 const requireStringOption = (command: CommandInteractionOption, index = 0) => {
-	if(isUndefined(command.options)) {
+	if(is.undefined(command.options)) {
 		throw new Error("Internal Discord command malformed");
 	}
 	if(!(command.options instanceof Collection)) {
@@ -75,7 +75,7 @@ const requireStringOption = (command: CommandInteractionOption, index = 0) => {
 		throw new Error(`Internal invalid command index: ${index}`);
 	}
 	const option = options[index].value;
-	if(!isString(option)) {
+	if(!is.string(option)) {
 		throw new Error("Internal Discord command malformed");
 	}
 	return option;

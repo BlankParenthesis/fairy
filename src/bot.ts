@@ -4,12 +4,12 @@ import * as util from "util";
 import { Client, Intents } from "discord.js";
 import * as chalk from "chalk";
 import Pxls = require("pxls");
+import is = require("check-types");
 
 import ServerHandler from "./server";
 import Repl from "./repl";
 import commands from "./commands";
-
-import { Interval, isUndefined, isString, isNumber } from "./util";
+import { Interval } from "./util";
 
 /* eslint-disable-next-line @typescript-eslint/no-var-requires */
 const config = require(path.resolve(__dirname, "..", "config.json"));
@@ -22,7 +22,7 @@ enum LogLevel {
 	DEBUG = 4,
 }
 
-const loglevel: LogLevel = isNumber(config.loglevel)
+const loglevel: LogLevel = is.number(config.loglevel as unknown)
 	? config.loglevel
 	: LogLevel[config.loglevel.toString().toUpperCase()];
 
@@ -31,11 +31,11 @@ const replServer = new Repl(loglevel);
 // this is async, so it won't happen immediately
 replServer.setupHistory();
 
-console.log = (...s) => loglevel >= LogLevel.LOG ? s.forEach(o => replServer.output(isString(o) ? o : util.inspect(o))) : null;
-console.info = (...s) => loglevel >= LogLevel.INFO ? s.forEach(o => replServer.output(`ℹ ${isString(o) ? o : util.inspect(o)}`, chalk.white)) : null;
-console.error = (...s) => loglevel >= LogLevel.ERROR ? s.forEach(o => replServer.output(`🚫 ${isString(o) ? o : util.inspect(o)}`, chalk.redBright)) : null;
-console.warn = (...s) => loglevel >= LogLevel.WARN ? s.forEach(o => replServer.output(`⚠  ${isString(o) ? o : util.inspect(o)}`, chalk.yellow)) : null;
-console.debug = (...s) => loglevel >= LogLevel.DEBUG ? s.forEach(o => replServer.output(`🐛 ${isString(o) ? o : util.inspect(o)}`, chalk.gray)) : null;
+console.log = (...s) => loglevel >= LogLevel.LOG ? s.forEach(o => replServer.output(is.string(o) ? o : util.inspect(o))) : null;
+console.info = (...s) => loglevel >= LogLevel.INFO ? s.forEach(o => replServer.output(`ℹ ${is.string(o) ? o : util.inspect(o)}`, chalk.white)) : null;
+console.error = (...s) => loglevel >= LogLevel.ERROR ? s.forEach(o => replServer.output(`🚫 ${is.string(o) ? o : util.inspect(o)}`, chalk.redBright)) : null;
+console.warn = (...s) => loglevel >= LogLevel.WARN ? s.forEach(o => replServer.output(`⚠  ${is.string(o) ? o : util.inspect(o)}`, chalk.yellow)) : null;
+console.debug = (...s) => loglevel >= LogLevel.DEBUG ? s.forEach(o => replServer.output(`🐛 ${is.string(o) ? o : util.inspect(o)}`, chalk.gray)) : null;
 
 console.log(chalk.white("🧚 Please wait..."));
 
@@ -140,7 +140,7 @@ fairy.on("guildDelete", guild => {
 fairy.on("interaction", async interaction => {
 	if(interaction.isCommand()) {
 		const command = commands.get(interaction.commandName);
-		if(!isUndefined(command)) {
+		if(!is.undefined(command)) {
 			if(interaction.guildID) {
 				const server = SERVERS.get(interaction.guildID);
 

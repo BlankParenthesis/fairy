@@ -1,14 +1,15 @@
-import { PNG } from "pngjs";
 import * as fs from "fs";
+import * as path from "path";
+
+import { PNG } from "pngjs";
 import sharp = require("sharp");
 import got from "got";
-import * as path from "path";
+import is = require("check-types");
 
 import Pxls = require("pxls");
 import Histoire from "./history";
-import { Interval } from "./util";
 
-import { humanTime, zip, hashParams, isObject, hasProperty, isUndefined, isNumber } from "./util";
+import { Interval, humanTime, zip, hashParams, hasProperty } from "./util";
 
 const compressRGB = (arr: ArrayLike<number>) => (arr[0] << 16) | (arr[1] << 8) | arr[0];
 
@@ -89,14 +90,14 @@ const decodeTemplateImage = async (
 	const im = sharp(buffer);
 	const meta = await im.metadata();
 
-	if(isUndefined(meta.width)) {
+	if(is.undefined(meta.width)) {
 		throw new Error("Template image defines no width");
 	}
-	if(isUndefined(meta.height)) {
+	if(is.undefined(meta.height)) {
 		throw new Error("Template image defines no height");
 	}
 
-	const ratio = (!isUndefined(tw) && tw > 0) ? meta.width / tw : 1;
+	const ratio = (!is.undefined(tw) && tw > 0) ? meta.width / tw : 1;
 	if(ratio !== Math.round(ratio)) {
 		throw new Error("Refusing to process template with non-integer scale");
 	}
@@ -161,8 +162,8 @@ export default class Template {
 
 		const now = Date.now();
 
-		if(isObject(historicalData)) {
-			if(hasProperty(historicalData, "progress") && isNumber(historicalData.progress)) {
+		if(is.object(historicalData)) {
+			if(hasProperty(historicalData, "progress") && is.number(historicalData.progress)) {
 				this.lastCompletion = historicalData.progress;
 			} else {
 				this.lastCompletion = this.rawProgress;
@@ -171,7 +172,7 @@ export default class Template {
 			if(hasProperty(historicalData, "good") && Array.isArray(historicalData.good)) {
 				const data = new Uint16Array(historicalData.good);
 
-				if(hasProperty(historicalData, "timestamp") && isNumber(historicalData.timestamp)) {
+				if(hasProperty(historicalData, "timestamp") && is.number(historicalData.timestamp)) {
 					this.histy.backfill(data, historicalData.timestamp);
 				} else {
 					this.histy.backfill(data, now);
@@ -181,7 +182,7 @@ export default class Template {
 			if(hasProperty(historicalData, "bad") && Array.isArray(historicalData.bad)) {
 				const data = new Uint16Array(historicalData.bad);
 
-				if(hasProperty(historicalData, "timestamp") && isNumber(historicalData.timestamp)) {
+				if(hasProperty(historicalData, "timestamp") && is.number(historicalData.timestamp)) {
 					this.croire.backfill(data, historicalData.timestamp);
 				} else {
 					this.croire.backfill(data, now);
@@ -421,14 +422,14 @@ export default class Template {
 		const template = params.get("template");
 		const tw = params.get("tw");
 
-		if(isUndefined(template)) {
+		if(is.undefined(template)) {
 			throw new Error("Missing template source");
 		}
 
 		const { width, height, data } = await decodeTemplateImage(
 			mapPalette(pxls.palette), 
 			template,
-			isUndefined(tw) ? undefined : parseInt(tw)
+			is.undefined(tw) ? undefined : parseInt(tw)
 		);
 
 		const ox = params.get("ox");
@@ -436,8 +437,8 @@ export default class Template {
 
 		return new Template(
 			pxls, 
-			isUndefined(ox) ? 0 : parseInt(ox),
-			isUndefined(oy) ? 0 : parseInt(oy),
+			is.undefined(ox) ? 0 : parseInt(ox),
+			is.undefined(oy) ? 0 : parseInt(oy),
 			width, 
 			height, 
 			data, 
@@ -446,16 +447,16 @@ export default class Template {
 	}
 
 	static async from(pxls: Pxls, name: string, directory: string, persistentData: unknown) {
-		if(!isObject(persistentData)) {
+		if(!is.object(persistentData)) {
 			throw new Error("Invalid template data");
 		}
-		if(!hasProperty(persistentData, "x") || !isNumber(persistentData.x)) {
+		if(!hasProperty(persistentData, "x") || !is.number(persistentData.x)) {
 			throw new Error("Invalid template x position");
 		}
-		if(!hasProperty(persistentData, "y") || !isNumber(persistentData.y)) {
+		if(!hasProperty(persistentData, "y") || !is.number(persistentData.y)) {
 			throw new Error("Invalid template y position");
 		}
-		if(!hasProperty(persistentData, "started") || !isNumber(persistentData.started)) {
+		if(!hasProperty(persistentData, "started") || !is.number(persistentData.started)) {
 			throw new Error("Invalid template start time");
 		}
 		if(!hasProperty(persistentData, "history")) {
@@ -467,10 +468,10 @@ export default class Template {
 		const im = sharp(imagePath);
 		const { width, height } = await im.metadata();
 
-		if(isUndefined(width)) {
+		if(is.undefined(width)) {
 			throw new Error("Template image defines no width");
 		}
-		if(isUndefined(height)) {
+		if(is.undefined(height)) {
 			throw new Error("Template image defines no height");
 		}
 

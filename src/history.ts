@@ -1,4 +1,6 @@
-import { Interval, isUndefined, sum } from "./util";
+import is = require("check-types");
+
+import { Interval, sum } from "./util";
 
 export default class Histiore {
 	private data: Uint16Array;
@@ -46,7 +48,7 @@ export default class Histiore {
 
 					const skip = yield quotient + extra;
 
-					if(!isUndefined(skip) && skip > 0) {
+					if(!is.undefined(skip) && skip > 0) {
 						i += skip;
 						currentRemainder += remainder * skip;
 					}

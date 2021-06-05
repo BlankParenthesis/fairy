@@ -62,22 +62,6 @@ const hasProperty = <
 	return Object.prototype.hasOwnProperty.call(object, property);
 };
 
-const isObject = <X extends {}>(object: unknown): object is X => {
-	return typeof object === "object" && object !== null;
-};
-
-const isUndefined = (o: any): o is undefined => {
-	return typeof o === "undefined";
-};
-
-const isString = (o: any): o is string => {
-	return typeof o === "string";
-};
-
-const isNumber = (o: any): o is number => {
-	return typeof o === "number";
-};
-
 export {
 	sleep,
 	humanTime,
@@ -87,8 +71,4 @@ export {
 	hashParams,
 	escapeRegExp,
 	hasProperty,
-	isObject,
-	isUndefined,
-	isString,
-	isNumber,
 };

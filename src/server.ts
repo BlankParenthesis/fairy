@@ -3,11 +3,12 @@ import * as path from "path";
 
 import { DiscordAPIError, Guild, Message, Constants } from "discord.js";
 import Pxls = require("pxls");
+import * as is from "check-types";
 
 import Summary from "./summary";
 import Template from "./template";
 
-import { hashParams, escapeRegExp, isObject, hasProperty, isUndefined, isString } from "./util";
+import { hashParams, escapeRegExp, hasProperty } from "./util";
 
 export default class ServerHandler {
 	private pxls: Pxls;
@@ -28,7 +29,7 @@ export default class ServerHandler {
 		this.pxls.on("sync", async ({ metadata }) => {
 			const { canvasCode } = metadata;
 
-			if(isUndefined(this.canvasCode)) {
+			if(is.undefined(this.canvasCode)) {
 				this.canvasCode = canvasCode;
 			}
 
@@ -128,7 +129,7 @@ export default class ServerHandler {
 	async load() {
 		// all the shenanigans with loadjob is just so that we can ensure
 		// that this server handler is loaded before use.
-		if(isUndefined(this.loadjob)) {
+		if(is.undefined(this.loadjob)) {
 			this.loadjob = (async () => {
 				await this._ensureDirectories();
 
@@ -144,9 +145,9 @@ export default class ServerHandler {
 					// ignored
 				}
 
-				if(isObject(persistentData)) {
+				if(is.object(persistentData)) {
 					const templates = (hasProperty(persistentData, "templates")
-							&& isObject(persistentData.templates))
+							&& is.object(persistentData.templates))
 						? persistentData.templates
 						: {};
 					const summaries = (hasProperty(persistentData, "summaries")
@@ -155,7 +156,7 @@ export default class ServerHandler {
 						: [];
 
 					this.canvasCode = hasProperty(persistentData, "canvasCode")
-							&& isString(persistentData.canvasCode)
+							&& is.string(persistentData.canvasCode)
 						? persistentData.canvasCode
 						: this.pxls.canvasCode;
 
@@ -282,7 +283,7 @@ export default class ServerHandler {
 
 		const template = this.templates.get(name);
 
-		if(isUndefined(template)) {
+		if(is.undefined(template)) {
 			return null;
 		}
 

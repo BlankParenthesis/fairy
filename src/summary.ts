@@ -1,6 +1,8 @@
-import ServerHandler from "./server";
+import is = require("check-types");
 import { MessageEmbed, Message, Guild, TextChannel, DiscordAPIError, Constants } from "discord.js";
-import { isObject, hasProperty, sleep, Interval, isUndefined, isString } from "./util";
+
+import ServerHandler from "./server";
+import { hasProperty, sleep, Interval } from "./util";
 
 export default class Summary {
 	private readonly serverHandler: ServerHandler;
@@ -51,7 +53,7 @@ export default class Summary {
 	}
 
 	static async from(serverHandler: ServerHandler, guild: Guild, data: unknown) {
-		if(!isObject(data)
+		if(!is.object(data)
 			|| !hasProperty(data, "channel")
 			|| !hasProperty(data, "message")
 			|| !hasProperty(data, "templates")
@@ -61,7 +63,7 @@ export default class Summary {
 		}
 
 		const channel = guild.channels.cache.get(data.channel as any);
-		if(isUndefined(channel)) {
+		if(is.undefined(channel)) {
 			console.warn(`Malformed channel for summary in guild ${guild.id}`);
 			return null;
 		}
@@ -74,7 +76,7 @@ export default class Summary {
 		const textChannel = channel as TextChannel;
 
 		let message: Message | undefined = undefined;
-		while(isUndefined(message)) {
+		while(is.undefined(message)) {
 			try {
 				message = await textChannel.messages.fetch(data.message as any);
 			} catch(e) {
@@ -103,7 +105,7 @@ export default class Summary {
 			return null;
 		}
 
-		return new Summary(serverHandler, message, templates.filter(s => isString(s)));
+		return new Summary(serverHandler, message, templates.filter(s => is.string(s)));
 	}
 
 	get persistent() {
