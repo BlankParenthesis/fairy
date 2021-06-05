@@ -38,6 +38,10 @@ export default class ServerHandler {
 				this.save().catch(console.error);
 			}
 
+			for(const template of this.templates.values()) {
+				template.sync();
+			}
+
 			this.canvasCode = canvasCode;
 		});
 	}

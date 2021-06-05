@@ -1,4 +1,4 @@
-import { Interval, sum } from "./util";
+import { Interval, isUndefined, sum } from "./util";
 
 export default class Histiore {
 	private data: Uint16Array;
@@ -9,37 +9,85 @@ export default class Histiore {
 		this.lastWriteTime = Date.now();
 	}
 
-	_addressAstral(time = Date.now()) {
+	private addressAstral(time = Date.now()) {
 		return Math.floor(time / Interval.MINUTE);
 	}
 
-	_addressAstralToReal(address: number) {
+	private addressAstralToReal(address: number) {
 		return address % this.data.length;
 	}
 
-	_addressReal(time = Date.now()) {
-		return this._addressAstralToReal(this._addressAstral(time));
+	private addressReal(time = Date.now()) {
+		return this.addressAstralToReal(this.addressAstral(time));
 	}
 
-	_clearOldData(now = Date.now(), clearValue = 0) {
-		const lastAddress = this._addressAstral(this.lastWriteTime);
-		const currentAddress = this._addressAstral(Date.now());
+	private fillData(addValue: number, now = Date.now()) {
+		let lastAddress = this.addressAstral(this.lastWriteTime);
+		const currentAddress = this.addressAstral(now);
+
+		const currentRealAddress = this.addressAstralToReal(currentAddress);
 
 		if(lastAddress < currentAddress) {
 			// we have shifted which data cell we're writing to
 			// this means it probably contains some old data.
+		
+			const cells = currentAddress - lastAddress;
+
+
+			const values = (function* (total: number, count: number): Generator<number, void, number | undefined> {
+				const quotient = Math.floor(total / count);
+				const remainder = total % count;
+
+				let currentRemainder = 0;
+
+				for(let i = 0; i < count; i++) {
+					currentRemainder += remainder;
+
+					const extra = Math.floor(currentRemainder / count);
+
+					const skip = yield quotient + extra;
+
+					if(!isUndefined(skip) && skip > 0) {
+						i += skip;
+						currentRemainder += remainder * skip;
+					}
+
+					currentRemainder %= count;
+				}
+
+				console.assert(currentRemainder === 0);
+			})(addValue, cells);
 
 			if((currentAddress - lastAddress) >= this.data.length) {
 				// all of the data is invalid
-				this.data.fill(0);
 
-				return;
+				const skip = cells - this.data.length;
+				if(skip > 0) {
+					// The first next call executes up to the first yield only — 
+					// so it never gets the skip argument.
+					values.next();
+					if(skip > 1) {
+						// On the second next call, the generator has already yielded two values.
+						// Since we want to skip by `skip` and have already skipped two, 
+						// we subtract two.
+						values.next(skip - 2);
+					}
+				}
+
+				lastAddress = currentAddress - this.data.length;
 			}
 
-			const lastRealAddress = this._addressAstralToReal(lastAddress);
-			const currentRealAddress = this._addressAstralToReal(currentAddress);
+			const lastRealAddress = this.addressAstralToReal(lastAddress);
 
-			if(lastRealAddress > currentRealAddress) {
+			const newData = new Uint16Array(values);
+
+			const filledAndWrapped = lastRealAddress === currentRealAddress
+			// if the address is at the end of the data, it's not wrapped.
+				&& lastRealAddress !== this.data.length;
+
+			// NOTE: on addresses — since we don't want to include the old address,
+			//       we add one to all addresses before use.
+			if(lastRealAddress > currentRealAddress || filledAndWrapped) {
 				// at some point between the last and current write,
 				// we hit the end of the buffer and wrapped.
 				// this means we potentially need to reset data at the start
@@ -53,12 +101,18 @@ export default class Histiore {
 
 					we want:
 
-					[0, 0, 1, …, 1, 2, 0]
+					[X, X, 1, …, 1, 2, X]
 					    ^ new       ^ last
 				*/
 
-				this.data.subarray(0, currentRealAddress + 1).fill(clearValue);
-				this.data.subarray(lastRealAddress + 1).fill(clearValue);
+				const headSize = this.data.length - (lastRealAddress + 1);
+				const tailSize = currentRealAddress + 1;
+				
+				const headData = newData.subarray(0, headSize);
+				this.data.subarray(lastRealAddress + 1).set(headData);
+
+				const tailData = newData.subarray(headSize, headSize + tailSize);
+				this.data.subarray(0, currentRealAddress + 1).set(tailData);
 			} else {
 				/*
 					we have:
@@ -68,37 +122,33 @@ export default class Histiore {
 
 					we want:
 
-					[3, 2, 0, 0, 0, 3]
+					[3, 2, X, X, X, 3]
 					    ^ last   ^ new
 
 				*/
 
-				this.data.subarray(lastRealAddress + 1, currentRealAddress + 1)
-					.fill(clearValue);
+				this.data.subarray((lastRealAddress + 1) % this.data.length, currentRealAddress + 1)
+					.set(newData);
 			}
+		} else {
+			this.data[currentRealAddress] += addValue;
 		}
 
 		this.lastWriteTime = now;
 	}
 
-	hit() {
-		const time = Date.now();
-		this._clearOldData(time);
-		const address = this._addressReal(time);
-		this.data[address]++;
+	hit(delta: number, time = Date.now()) {
+		this.fillData(delta, time);
 	}
 
 	get(time = Date.now()) {
-		this._clearOldData(Date.now());
-		const address = this._addressReal(time);
+		const address = this.addressReal(time);
 		return this.data[address];
 	}
 
 	range(start: number, end = Date.now()) {
-		this._clearOldData(Date.now());
-
-		let startAddress = this._addressAstral(start);
-		const endAddress = this._addressAstral(end);
+		let startAddress = this.addressAstral(start);
+		const endAddress = this.addressAstral(end);
 
 		if((endAddress - startAddress) > this.data.length) {
 			// we don't have enough data to fulfill the requested range
@@ -107,8 +157,8 @@ export default class Histiore {
 			startAddress = endAddress - this.data.length;
 		}
 
-		const startRealAddress = this._addressAstralToReal(startAddress);
-		const endRealAddress = this._addressAstralToReal(endAddress);
+		const startRealAddress = this.addressAstralToReal(startAddress);
+		const endRealAddress = this.addressAstralToReal(endAddress);
 
 		if(startRealAddress > endRealAddress) {
 			// the range covers data that hits the end of the buffer
@@ -131,19 +181,9 @@ export default class Histiore {
 		return this.range(now - period, now).reduce(sum);
 	}
 
-	backfill(data: Uint16Array, dataTime: number, newHits: number, newTime: number) {
-		data.slice(0, this.data.length)
-			.forEach((value, i) => this.data[i] = value);
-
+	backfill(data: Uint16Array, dataTime: number) {
+		this.data.set(data);
 		this.lastWriteTime = dataTime;
-
-		const cells = this._addressAstral(newTime) - this._addressAstral(dataTime);
-
-		// FIXME: since this is floored later, it often becomes wildly inaccurate.
-		// the fix is to have _clearOldData accept a float value and fill appropriately.
-		const hitsPerCell = newHits / cells;
-
-		this._clearOldData(newTime, Math.floor(hitsPerCell));
 	}
 
 	copyData() {

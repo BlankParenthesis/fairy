@@ -130,6 +130,8 @@ export default class Template {
 	private histy = new Histoire();
 	private croire = new Histoire();
 
+	private lastCompletion: number;
+
 	constructor(
 		pxls: Pxls, 
 		x: number, 
@@ -151,50 +153,55 @@ export default class Template {
 		const now = Date.now();
 
 		if(isObject(historicalData)) {
+			if(hasProperty(historicalData, "progress") && typeof historicalData.progress === "number") {
+				this.lastCompletion = historicalData.progress;
+			} else {
+				this.lastCompletion = this.rawProgress;
+			}
+
 			if(hasProperty(historicalData, "good") && Array.isArray(historicalData.good)) {
 				const data = new Uint16Array(historicalData.good);
 
-				if(hasProperty(historicalData, "timestamp") && typeof historicalData.timestamp === "number"
-					&& hasProperty(historicalData, "progress") && typeof historicalData.progress === "number"
-				) {
-					const goodValueDelta = Math.max(this.rawProgress - historicalData.progress, 0);
-					this.histy.backfill(
-						data, 
-						historicalData.timestamp, 
-						goodValueDelta,
-						now,
-					);
+				if(hasProperty(historicalData, "timestamp") && typeof historicalData.timestamp === "number") {
+					this.histy.backfill(data, historicalData.timestamp);
 				} else {
-					this.histy.backfill(data, now, 0, now);
+					this.histy.backfill(data, now);
 				}
 			}
 
 			if(hasProperty(historicalData, "bad") && Array.isArray(historicalData.bad)) {
 				const data = new Uint16Array(historicalData.bad);
 
-				if(hasProperty(historicalData, "timestamp") && typeof historicalData.timestamp === "number"
-					&& hasProperty(historicalData, "progress") && typeof historicalData.progress === "number"
-				) {
-					const badValueDelta = Math.max(historicalData.progress - this.rawProgress, 0);
-					this.croire.backfill(
-						data, 
-						historicalData.timestamp, 
-						badValueDelta,
-						now,
-					);
+				if(hasProperty(historicalData, "timestamp") && typeof historicalData.timestamp === "number") {
+					this.croire.backfill(data, historicalData.timestamp);
 				} else {
-					this.histy.backfill(data, now, 0, now);
+					this.croire.backfill(data, now);
 				}
 			}
+		} else {
+			this.lastCompletion = this.rawProgress;
 		}
+
+		this.sync(now);
+	}
+
+	sync(time = Date.now()) {
+		const progress = this.rawProgress;
+		const goodValueDelta = Math.max(progress - this.lastCompletion, 0);
+		const badValueDelta = Math.max(this.lastCompletion - progress, 0);
+		this.histy.hit(goodValueDelta, time);
+		this.croire.hit(badValueDelta, time);
+		this.lastCompletion = progress;
 	}
 
 	goodPixel() {
-		this.histy.hit();
+		this.histy.hit(1);
+		this.lastCompletion++;
 	}
 
 	badPixel() {
-		this.croire.hit();
+		this.croire.hit(1);
+		this.lastCompletion--;
 	}
 
 	private etaFromWindow(window: number, rate: number) {
