@@ -105,7 +105,7 @@ export default class ServerHandler {
 		}
 
 		const template = await Template.download(this.pxls, url);
-		template.save(path.resolve(this.templateDir, `${name}.png`));
+		await template.save(path.resolve(this.templateDir, `${name}.png`));
 		this.templates.set(name, template);
 
 		return { name, template };

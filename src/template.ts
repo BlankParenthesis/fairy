@@ -10,6 +10,7 @@ import Pxls = require("pxls");
 import Histoire from "./history";
 
 import { Interval, humanTime, zip, hashParams, hasProperty } from "./util";
+import { rgb } from "chalk";
 
 const compressRGB = (arr: ArrayLike<number>) => (arr[0] << 16) | (arr[1] << 8) | arr[0];
 
@@ -407,8 +408,8 @@ export default class Template {
 		for(let i = 0; i < len; i += 4) {
 			if(palette[data[i >> 2]]) {
 				rgba.set(palette[data[i >> 2]].values, i);
-			} else {
-				rgba.set([0, 0, 0, 0], i);
+				// set the alpha value
+				rgba[i + 3] = 255;
 			}
 		}
 		return rgba;
@@ -421,8 +422,10 @@ export default class Template {
 	}
 
 	async save(file: string) {
-		return await new Promise(resolve => {
-			this.png.pipe(fs.createWriteStream(file)).once("finish", resolve);
+		return await new Promise((resolve, reject) => {
+			this.png.pipe(fs.createWriteStream(file))
+				.once("finish", resolve)
+				.once("error", reject);
 		});
 	}
 
