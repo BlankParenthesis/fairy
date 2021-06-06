@@ -27,23 +27,11 @@ export default class ServerHandler {
 		this.guild = guild;
 
 		this.pxls.on("sync", async ({ metadata }) => {
-			const { canvasCode } = metadata;
-
-			if(is.undefined(this.canvasCode)) {
-				this.canvasCode = canvasCode;
-			}
-
-			if(this.canvasCode !== canvasCode) {
-				await this.reset();
-				this.cleanUnusedTemplateFiles().catch(console.error);
-				this.save().catch(console.error);
-			}
+			await this.maybeReset(metadata.canvasCode);
 
 			for(const template of this.templates.values()) {
 				template.sync();
 			}
-
-			this.canvasCode = canvasCode;
 		});
 	}
 
@@ -181,6 +169,8 @@ export default class ServerHandler {
 					this.summaries = (await Promise.all(
 						summaries.map(s => Summary.from(this, this.guild, s))
 					)).filter((s): s is Exclude<typeof s, null> => s !== null);
+
+					await this.maybeReset(this.pxls.canvasCode);
 				}
 
 				await this.cleanUnusedTemplateFiles();
@@ -225,10 +215,24 @@ export default class ServerHandler {
 		await Promise.all(waywardFiles.map(f => fs.unlink(f)));
 	}
 
+	private async maybeReset(canvasCode: string) {
+		if(is.undefined(this.canvasCode)) {
+			this.canvasCode = canvasCode;
+		}
+
+		if(this.canvasCode !== canvasCode) {
+			await this.reset();
+			this.cleanUnusedTemplateFiles().catch(console.error);
+			this.save().catch(console.error);
+		}
+
+		this.canvasCode = canvasCode;
+	}
+
 	async reset() {
-		this.templates.clear();
 		const summaries = this.summaries.splice(0);
 		await Promise.all(summaries.map(s => s.finalize()));
+		this.templates.clear();
 	}
 
 	get id() {
