@@ -47,7 +47,7 @@ export default class ServerHandler {
 		});
 	}
 
-	pixel(x: number, y: number, color: number, oldColor: number) {
+	pixel(x: number, y: number, color: number, oldColor?: number) {
 		for(const template of this.templates.values()) {
 			const templateColor = template.at(x, y);
 			if(templateColor === Template.transparentPixel) {
