@@ -325,63 +325,73 @@ export default class Template {
 	}
 
 	get summary() {
-		const { badPixels, eta } = this;
-		const now = Date.now();
-
-		// rate in px/unit time (px/ms).
-		// 4 px/min is considered fast
-		const fast = 4 / Interval.MINUTE;
-		const maxExamples = 4;
-		const ellipsize = badPixels.length > maxExamples ? "\n..." : "";
-		const badPixelsSummary = badPixels.length > 0
-			? `\`\`\`css\n${
-				badPixels.slice(0, maxExamples)
-					.map(p => `[${p.join(",")}] should be ${this.colorAt(p[0], p[1])}`)
-					.join("\n")
-			}${ellipsize}\`\`\``
-			: "";
-
-		const intervals = Object.entries({
-			"minute": Interval.MINUTE,
-			"hour": Interval.HOUR,
-			"day": Interval.DAY,
-		}).map(([label, interval]) => {
-			const goodProgress = this.histy.recentHits(interval);
-			const badProgress = this.croire.recentHits(interval);
-			const progress = goodProgress - badProgress;
-
-			const rate = Math.abs(progress) / interval;
-			const isFast = rate > fast;
-
-			let symbol;
-
-			if(progress > 0) {
-				symbol = isFast ? "⏫" : "🔼";
-			} else if(progress < 0) {
-				symbol = isFast ? "⏬" : "🔽";
-			} else {
-				symbol = "⏹";
-			}
-
-			return `${symbol} ${progress} pixels/${label}`;
-		});
-
-		const recencyDisclaimer = now - this.started < Interval.DAY
-			? `\n*started tracking ${humanTime(now - this.started)} ago*`
-			: "";
-		const progressSummary = this.complete
-			? ""
-			: `\n\n${intervals.join("\n")}\n${
-				eta >= 0
-					? `Done in ~**${humanTime(eta)}**`
-					: `Gone in ~**${humanTime(-eta)}**`
-			}${recencyDisclaimer}`;
+		if(this.size === 0) {
+			return "⚠ *Template is empty*";
+		}
 
 		const formattedProgress = parseFloat((this.progress * 100).toFixed(2));
-		return `${formattedProgress}% done\n`
-			+ `${this.rawProgress} of ${this.size} pixels`
-			+ `${progressSummary}`
-			+ `${badPixelsSummary}`;
+		const overview = `${formattedProgress}% done\n`
+			+ `${this.rawProgress} of ${this.size} pixels`;
+
+		if(this.complete) {
+			return overview;
+		} else {
+			const { badPixels, eta } = this;
+			const now = Date.now();
+
+			// rate in px/unit time (px/ms).
+			// 4 px/min is considered fast
+			const fast = 4 / Interval.MINUTE;
+			const maxExamples = 4;
+			const ellipsize = badPixels.length > maxExamples ? "\n..." : "";
+			const badPixelsSummary = badPixels.length > 0
+				? `\`\`\`css\n${
+					badPixels.slice(0, maxExamples)
+						.map(p => `[${p.join(",")}] should be ${this.colorAt(p[0], p[1])}`)
+						.join("\n")
+				}${ellipsize}\`\`\``
+				: "";
+
+			const intervals = Object.entries({
+				"minute": Interval.MINUTE,
+				"hour": Interval.HOUR,
+				"day": Interval.DAY,
+			}).map(([label, interval]) => {
+				const goodProgress = this.histy.recentHits(interval);
+				const badProgress = this.croire.recentHits(interval);
+				const progress = goodProgress - badProgress;
+
+				const rate = Math.abs(progress) / interval;
+				const isFast = rate > fast;
+
+				let symbol;
+
+				if(progress > 0) {
+					symbol = isFast ? "⏫" : "🔼";
+				} else if(progress < 0) {
+					symbol = isFast ? "⏬" : "🔽";
+				} else {
+					symbol = "⏹";
+				}
+
+				return `${symbol} ${progress} pixels/${label}`;
+			});
+
+			const recencyDisclaimer = now - this.started < Interval.DAY
+				? `\n*started tracking ${humanTime(now - this.started)} ago*`
+				: "";
+			const progressSummary = this.complete
+				? ""
+				: `\n\n${intervals.join("\n")}\n${
+					eta >= 0
+						? `Done in ~**${humanTime(eta)}**`
+						: `Gone in ~**${humanTime(-eta)}**`
+				}${recencyDisclaimer}`;
+
+			return `${overview}`
+				+ `${progressSummary}`
+				+ `${badPixelsSummary}`;
+		}
 	}
 
 	get shadow() {
