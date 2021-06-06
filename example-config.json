@@ -1,4 +1,4 @@
 {
-	"loglevel": "DEBUG",
+	"loglevel": ["LOG", "INFO", "ERROR", "WARN", "DEBUG"],
 	"token": "abcdef.123.456789"
 }

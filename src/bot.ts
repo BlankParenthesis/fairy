@@ -7,35 +7,59 @@ import Pxls = require("pxls");
 import is = require("check-types");
 
 import ServerHandler from "./server";
-import Repl from "./repl";
+import Repl, { LogLevel } from "./repl";
 import commands from "./commands";
-import { Interval } from "./util";
+import { Interval, hasProperty } from "./util";
 
 /* eslint-disable-next-line @typescript-eslint/no-var-requires */
-const config = require(path.resolve(__dirname, "..", "config.json"));
+const config: unknown = require(path.resolve(__dirname, "..", "config.json"));
 
-enum LogLevel {
-	LOG = 0,
-	INFO = 1,
-	ERROR = 2,
-	WARN = 3,
-	DEBUG = 4,
+if(!is.object(config)) {
+	throw new Error("Malformed config");
 }
 
-const loglevel: LogLevel = is.number(config.loglevel as unknown)
-	? config.loglevel
-	: LogLevel[config.loglevel.toString().toUpperCase()];
+const loglevel: Set<LogLevel> = ((levels: unknown): Set<LogLevel> => {
+	if(is.array(levels)) {
+		return new Set(levels.map(level => {
+			if(is.number(level)) {
+				return level;
+			} else if(is.string(level)) {
+				return (LogLevel as any)[level.toUpperCase()];
+			} else {
+				throw new Error(`Unknown log level: ${level}`);
+			}
+		}));
+	} else if(is.number(levels)) {
+		return new Set(Array(levels).fill(0).map((_, i) => i));
+	} else if(is.string(levels)) {
+		const level = (LogLevel as any)[levels.toUpperCase()];
+		return new Set(Array(level).fill(0).map((_, i) => i));
+	} else if(is.object(levels)) {
+		return new Set(Array.from(Object.entries(levels))
+			.filter(([k, v]) => v)
+			.map(([k, v]) => (LogLevel as any)[k.toUpperCase()]));
+	} else {
+		return new Set([
+			LogLevel.LOG,
+			LogLevel.INFO,
+			LogLevel.ERROR,
+			LogLevel.WARN,
+			LogLevel.DEBUG,
+		]);
+	}
+
+})(hasProperty(config, "loglevel") ? config.loglevel : null);
 
 const replServer = new Repl(loglevel);
 
 // this is async, so it won't happen immediately
 replServer.setupHistory();
 
-console.log = (...s) => loglevel >= LogLevel.LOG ? s.forEach(o => replServer.output(is.string(o) ? o : util.inspect(o))) : null;
-console.info = (...s) => loglevel >= LogLevel.INFO ? s.forEach(o => replServer.output(`ℹ ${is.string(o) ? o : util.inspect(o)}`, chalk.white)) : null;
-console.error = (...s) => loglevel >= LogLevel.ERROR ? s.forEach(o => replServer.output(`🚫 ${is.string(o) ? o : util.inspect(o)}`, chalk.redBright)) : null;
-console.warn = (...s) => loglevel >= LogLevel.WARN ? s.forEach(o => replServer.output(`⚠  ${is.string(o) ? o : util.inspect(o)}`, chalk.yellow)) : null;
-console.debug = (...s) => loglevel >= LogLevel.DEBUG ? s.forEach(o => replServer.output(`🐛 ${is.string(o) ? o : util.inspect(o)}`, chalk.gray)) : null;
+console.log = (...s) => s.forEach(out => replServer.output(out, LogLevel.LOG));
+console.info = (...s) => s.forEach(out => replServer.output(out, LogLevel.INFO));
+console.error = (...s) => s.forEach(out => replServer.output(out, LogLevel.ERROR));
+console.warn = (...s) => s.forEach(out => replServer.output(out, LogLevel.WARN));
+console.debug = (...s) => s.forEach(out => replServer.output(out, LogLevel.DEBUG));
 
 console.log(chalk.white("🧚 Please wait..."));
 
@@ -121,6 +145,12 @@ const set = (d: boolean, p: boolean) => {
 fairy.on("ready", () => set(true, pxlsUp));
 fairy.on("disconnect", () => set(false, pxlsUp));
 fairy.on("error", () => set(false, pxlsUp));
+if(!hasProperty(config, "token")) {
+	throw new Error("Missing bot token in config");
+}
+if(!is.string(config.token)) {
+	throw new Error("Invalid bot token in config");
+}
 fairy.login(config.token);
 
 fairy.on("guildCreate", guild => {

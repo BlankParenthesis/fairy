@@ -1,5 +1,5 @@
 import * as repl from "repl";
-import * as fs from "fs";
+import * as is from "check-types";
 import * as path from "path";
 import { inspect } from "util";
 
@@ -25,16 +25,23 @@ const MOVE_UP = (rows: number) => (!isNaN(rows) && rows > 0)
 	? `${CSI}${rows}A`
 	: "";
 
+export enum LogLevel {
+	LOG = 0,
+	INFO = 1,
+	ERROR = 2,
+	WARN = 3,
+	DEBUG = 4,
+}
+
 class Repl extends EventEmitter implements Repl {
 	private readonly server: repl.REPLServer;
-	// TODO: actually use this for something
-	readonly loglevel: number;
+	readonly enabledLoglevels: Set<LogLevel>;
 
 	private static readonly prompt = "> ";
 	private static readonly in = process.stdin;
 	private static readonly out = process.stdout;
 
-	constructor(loglevel: number) {
+	constructor(enabledLoglevels: Set<LogLevel>) {
 		super();
 		this.server = repl.start({
 			"prompt": Repl.prompt,
@@ -46,7 +53,7 @@ class Repl extends EventEmitter implements Repl {
 			"writer": (output) => `\r${DISPLAY_RESET}${inspect(output, { "colors": true })}`,
 		});
 
-		this.loglevel = loglevel;
+		this.enabledLoglevels = enabledLoglevels;
 
 		this.server.on("reset", context => this.emit("setupContext", context));
 		this.server.on("exit", () => this.emit("exit"));
@@ -69,11 +76,42 @@ class Repl extends EventEmitter implements Repl {
 		context.console = console;
 	}
 
-	output(string: string, color: (string: string) => string = _ => _) {
+	output(object: unknown, level: LogLevel = LogLevel.LOG) {
+		if(!this.enabledLoglevels.has(level)) {
+			return;
+		}
+
 		const prompt = `${Repl.prompt}${this.server.line}`;
 		const promptLines = Math.floor(prompt.length / Repl.out.columns);
 
-		const output = `${color(string)}\n`;
+		let output: string;
+
+		if(is.string(object)) {
+			output = object;
+		} else {
+			output = inspect(object);
+		}
+
+		switch(level) {
+		case LogLevel.LOG:
+			break;
+		case LogLevel.INFO:
+			output = chalk.blueBright(`ℹ ${output}`);
+			break;
+		case LogLevel.ERROR:
+			output = chalk.redBright(`🚫 ${output}`);
+			break;
+		case LogLevel.WARN:
+			output = chalk.yellow(`⚠ ${output}`);
+			break;
+		case LogLevel.DEBUG:
+			output = chalk.gray(`🐛 ${output}`);
+			break;
+		default:
+			break;
+		}
+
+		output = `${output}\n`;
 		
 		// deletes the prompt
 		this.server.output.write(`\r${MOVE_UP(promptLines)}${DISPLAY_RESET}`);
