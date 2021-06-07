@@ -422,8 +422,8 @@ export default class Template {
 		bufferHeight: number, 
 		x: number, 
 		y: number, 
-		height: number, 
 		width: number, 
+		height: number, 
 		blankFill: number,
 	) {
 		// use only negative offsets (and make them positive)
