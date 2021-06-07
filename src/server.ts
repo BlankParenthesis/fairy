@@ -80,6 +80,8 @@ export default class ServerHandler {
 				].includes(e.code as any)) {
 					console.debug(`Dropping summary whose message seems deleted: ${e.message}`);
 					this._forgetSummary(s);
+				} else {
+					console.debug(`Failed to update summary: ${e.message}`);
 				}
 			}
 		}));

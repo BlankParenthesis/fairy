@@ -23,6 +23,9 @@ export default class Histiore {
 		return this.addressAstralToReal(Histiore.addressAstral(time));
 	}
 
+	// TODO: create an abstraction to manage these rotating buffers:
+	// Between this and `range`, this is too complicated and messy —
+	// it's very error-prone and hard to reason about.
 	private fillData(addValue: number, now = Date.now()) {
 		let lastAddress = Histiore.addressAstral(this.lastWriteTime);
 		const currentAddress = Histiore.addressAstral(now);
@@ -161,7 +164,13 @@ export default class Histiore {
 		const startRealAddress = this.addressAstralToReal(startAddress);
 		const endRealAddress = this.addressAstralToReal(endAddress);
 
-		if(startRealAddress > endRealAddress) {
+		// There's probably an off-by-one error here: there are probably loads of those.
+		// see the TODO above for a solution.
+		const filledAndWrapped = startRealAddress === endRealAddress
+		// if the address is at the end of the data, it's not wrapped.
+			&& endRealAddress !== this.data.length;
+
+		if(startRealAddress > endRealAddress || filledAndWrapped) {
 			// the range covers data that hits the end of the buffer
 			// and wraps back to the start.
 
@@ -172,6 +181,8 @@ export default class Histiore {
 			returnData.set(startData);
 			returnData.set(endData, startData.length);
 			return returnData;
+		} else if(startRealAddress === endRealAddress) {
+			return this.data.slice(0, this.data.length);
 		} else {
 			return this.data.slice(startRealAddress, endRealAddress);
 		}
@@ -179,7 +190,7 @@ export default class Histiore {
 
 	recentHits(period: number) {
 		const now = Date.now();
-		return this.range(now - period, now).reduce(sum);
+		return this.range(now - period, now).reduce(sum, 0);
 	}
 
 	backfill(data: Uint16Array, dataTime: number) {
