@@ -121,6 +121,7 @@ const mapPalette = (palette: PxlsColor[]): MappedPalette => new Map(
 		.map(e => [compressRGB(e[1].values), e[0]])
 );
 
+// TODO: cache things — many methods of this perform expensive operations which could probably be cached.
 export default class Template {
 	private pxls: Pxls;
 
@@ -396,7 +397,42 @@ export default class Template {
 	}
 
 	get shadow() {
-		return this.pxls.getCroppedCanvas(this.x, this.y, this.width, this.height);
+		const availableWidth = this.pxls.width - Math.max(this.x, 0);
+		const availableHeight = this.pxls.height - Math.max(this.y, 0);
+
+		const shadowWidth = Math.min(this.width - Math.max(-this.x, 0), availableWidth);
+		const shadowHeight = Math.min(this.height - Math.max(-this.y, 0), availableHeight);
+
+		const shadowBuffer = new Uint8Array(this.width * this.height);
+		const shadowData = this.pxls.cropCanvas(
+			Math.max(this.x, 0), 
+			Math.max(this.y, 0), 
+			shadowWidth, 
+			shadowHeight, 
+		);
+
+		const oversized = this.x < 0
+			|| this.y < 0
+			|| this.width > availableWidth
+			|| this.height > availableHeight;
+
+		if(oversized) {
+			shadowBuffer.fill(Template.transparentPixel);
+
+			const offsetX = Math.max(-this.x, 0);
+			const offsetY = Math.max(-this.y, 0);
+
+			for(let y = 0; y < shadowHeight; y++) {
+				const rowLocation = y * shadowWidth;
+				const row = shadowData.subarray(rowLocation, rowLocation + shadowWidth);
+				const location = (y + offsetY) * this.width + offsetX;
+				shadowBuffer.set(row, location);
+			}
+		} else {
+			shadowBuffer.set(shadowData);
+		}
+
+		return shadowBuffer;
 	}
 
 	get rgba() {
