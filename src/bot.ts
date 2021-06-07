@@ -67,7 +67,7 @@ const fairy = new Client({ "intents": [
 	Intents.FLAGS.GUILDS,
 	Intents.FLAGS.GUILD_MEMBERS,
 ] });
-const pxls = new Pxls({ "buffers": [0] });
+const pxls = new Pxls({ "buffers": [0, 2] });
 
 const SERVERS: Map<string, ServerHandler> = new Map();
 const init = async () => {

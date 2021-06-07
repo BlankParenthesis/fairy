@@ -304,6 +304,17 @@ export default class Template {
 		return this.data.filter(b => b !== Template.transparentPixel).length;
 	}
 
+	get placeableSize() {
+		return zip(this.data, this.placeableShadow)
+			.reduce(
+				(count, [pixel, placeable]) => 
+					(placeable === 0 && pixel !== Template.transparentPixel)
+						? count + 1
+						: count,
+				0
+			);
+	}
+
 	get badPixels() {
 		const data = zip(this.data, this.shadow);
 		const bads = [];
@@ -327,13 +338,22 @@ export default class Template {
 	}
 
 	get summary() {
-		if(this.size === 0) {
+		const { size } = this;
+
+		if(size === 0) {
 			return "⚠ *Template is empty*";
 		}
 
+		const unplaceablePixels = size - this.placeableSize;
+
+		const unplaceablePixelsNotice = unplaceablePixels > 0
+			? `\n⚠ *${unplaceablePixels} pixels out of bounds*`
+			: "";
+
 		const formattedProgress = parseFloat((this.progress * 100).toFixed(2));
 		const overview = `${formattedProgress}% done\n`
-			+ `${this.rawProgress} of ${this.size} pixels`;
+			+ `${this.rawProgress} of ${size} pixels`
+			+ `${unplaceablePixelsNotice}`;
 
 		if(this.complete) {
 			return overview;
@@ -396,43 +416,67 @@ export default class Template {
 		}
 	}
 
-	get shadow() {
-		const availableWidth = this.pxls.width - Math.max(this.x, 0);
-		const availableHeight = this.pxls.height - Math.max(this.y, 0);
+	private static safelyCropBuffer(
+		buffer: Uint8Array, 
+		bufferWidth: number, 
+		bufferHeight: number, 
+		x: number, 
+		y: number, 
+		height: number, 
+		width: number, 
+		blankFill: number,
+	) {
+		// use only negative offsets (and make them positive)
+		const putOffsetX = Math.max(-x, 0);
+		const putOffsetY = Math.max(-y, 0);
+		
+		// use only positive offsets
+		const takeOffsetX = Math.max(x, 0);
+		const takeOffsetY = Math.max(y, 0);
 
-		const shadowWidth = Math.min(this.width - Math.max(-this.x, 0), availableWidth);
-		const shadowHeight = Math.min(this.height - Math.max(-this.y, 0), availableHeight);
+		const availableWidth = bufferWidth - takeOffsetX;
+		const availableHeight = bufferHeight - takeOffsetY;
 
-		const shadowBuffer = new Uint8Array(this.width * this.height);
-		const shadowData = this.pxls.cropCanvas(
-			Math.max(this.x, 0), 
-			Math.max(this.y, 0), 
-			shadowWidth, 
-			shadowHeight, 
-		);
+		const croppedDataWidth = Math.min(width - putOffsetX, availableWidth);
+		const croppedDataHeight = Math.min(height - putOffsetY, availableHeight);
 
-		const oversized = this.x < 0
-			|| this.y < 0
-			|| this.width > availableWidth
-			|| this.height > availableHeight;
+		const croppedBuffer = new Uint8Array(width * height);
+		croppedBuffer.fill(blankFill);
 
-		if(oversized) {
-			shadowBuffer.fill(Template.transparentPixel);
-
-			const offsetX = Math.max(-this.x, 0);
-			const offsetY = Math.max(-this.y, 0);
-
-			for(let y = 0; y < shadowHeight; y++) {
-				const rowLocation = y * shadowWidth;
-				const row = shadowData.subarray(rowLocation, rowLocation + shadowWidth);
-				const location = (y + offsetY) * this.width + offsetX;
-				shadowBuffer.set(row, location);
-			}
-		} else {
-			shadowBuffer.set(shadowData);
+		for(let y = 0; y < croppedDataHeight; y++) {
+			const takeLocation = (y + takeOffsetY) * bufferWidth + takeOffsetX;
+			const putLocation = (y + putOffsetY) * width + putOffsetX;
+			const row = buffer.subarray(takeLocation, takeLocation + croppedDataWidth);
+			croppedBuffer.set(row, putLocation);
 		}
 
-		return shadowBuffer;
+		return croppedBuffer;
+	}
+
+	get placeableShadow() {
+		return Template.safelyCropBuffer(
+			this.pxls.placemap, 
+			this.pxls.width,
+			this.pxls.height,
+			this.x,
+			this.y,
+			this.width,
+			this.height,
+			1,
+		);
+	}
+
+	get shadow() {
+		return Template.safelyCropBuffer(
+			this.pxls.canvas, 
+			this.pxls.width,
+			this.pxls.height,
+			this.x,
+			this.y,
+			this.width,
+			this.height,
+			Template.transparentPixel,
+		);
 	}
 
 	get rgba() {
