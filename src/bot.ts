@@ -30,10 +30,10 @@ const loglevel: Set<LogLevel> = ((levels: unknown): Set<LogLevel> => {
 			}
 		}));
 	} else if(is.number(levels)) {
-		return new Set(Array(levels).fill(0).map((_, i) => i));
+		return new Set(Array(levels + 1).fill(0).map((_, i) => i));
 	} else if(is.string(levels)) {
 		const level = (LogLevel as any)[levels.toUpperCase()];
-		return new Set(Array(level).fill(0).map((_, i) => i));
+		return new Set(Array(level + 1).fill(0).map((_, i) => i));
 	} else if(is.object(levels)) {
 		return new Set(Array.from(Object.entries(levels))
 			.filter(([k, v]) => v)
