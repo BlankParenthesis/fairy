@@ -2,7 +2,7 @@ import { promises as fs } from "fs";
 import * as path from "path";
 
 import { DiscordAPIError, Guild, Message, Constants } from "discord.js";
-import Pxls from "pxls";
+import { Pxls, TRANSPARENT_PIXEL } from "pxls";
 import * as is from "check-types";
 
 import Summary from "./summary";
@@ -38,7 +38,7 @@ export default class ServerHandler {
 	pixel(x: number, y: number, color: number, oldColor?: number) {
 		for(const template of this.templates.values()) {
 			const templateColor = template.at(x, y);
-			if(templateColor === Template.transparentPixel) {
+			if(templateColor === TRANSPARENT_PIXEL) {
 				return;
 			}
 

@@ -6,7 +6,7 @@ import sharp = require("sharp");
 import got from "got";
 import is = require("check-types");
 
-import Pxls from "pxls";
+import { Pxls, TRANSPARENT_PIXEL } from "pxls";
 import Histoire from "./history";
 
 import { Interval, humanTime, zip, hashParams, hasProperty } from "./util";
@@ -140,8 +140,6 @@ export default class Template {
 	private croire = new Histoire();
 
 	private lastCompletion: number;
-
-	static readonly transparentPixel = 255;
 
 	constructor(
 		pxls: Pxls, 
@@ -292,7 +290,7 @@ export default class Template {
 	}
 
 	at(x: number, y: number) {
-		return this.bounds(x, y) ? this.data[x - this.x + ((y - this.y) * this.width)] : Template.transparentPixel;
+		return this.bounds(x, y) ? this.data[x - this.x + ((y - this.y) * this.width)] : TRANSPARENT_PIXEL;
 	}
 
 	colorAt(x: number, y: number) {
@@ -300,14 +298,14 @@ export default class Template {
 	}
 
 	get size() {
-		return this.data.filter(b => b !== Template.transparentPixel).length;
+		return this.data.filter(b => b !== TRANSPARENT_PIXEL).length;
 	}
 
 	get placeableSize() {
 		return zip(this.data, this.placeableShadow)
 			.reduce(
 				(count, [pixel, placeable]) => 
-					(placeable === 0 && pixel !== Template.transparentPixel)
+					(placeable === 0 && pixel !== TRANSPARENT_PIXEL)
 						? count + 1
 						: count,
 				0
@@ -320,7 +318,7 @@ export default class Template {
 		for(let x = 0; x < this.width; x++) {
 			for(let y = 0; y < this.height; y++) {
 				const i = x + (y * this.width);
-				if(data[i][0] !== Template.transparentPixel && data[i][0] !== data[i][1]) {
+				if(data[i][0] !== TRANSPARENT_PIXEL && data[i][0] !== data[i][1]) {
 					bads.push([x + this.x, y + this.y]);
 				}
 			}
@@ -329,7 +327,7 @@ export default class Template {
 	}
 
 	get rawProgress() {
-		return zip(this.data, this.shadow).filter(v => v[1] !== Template.transparentPixel && v[0] === v[1]).length;
+		return zip(this.data, this.shadow).filter(v => v[1] !== TRANSPARENT_PIXEL && v[0] === v[1]).length;
 	}
 
 	get progress() {
@@ -474,7 +472,7 @@ export default class Template {
 			this.y,
 			this.width,
 			this.height,
-			Template.transparentPixel,
+			TRANSPARENT_PIXEL,
 		);
 	}
 
