@@ -3,7 +3,7 @@ import * as util from "util";
 
 import { Client, Intents } from "discord.js";
 import * as chalk from "chalk";
-import Pxls = require("pxls");
+import { Pxls, BufferType } from "pxls";
 import is = require("check-types");
 
 import ServerHandler from "./server";
@@ -67,7 +67,7 @@ const fairy = new Client({ "intents": [
 	Intents.FLAGS.GUILDS,
 	Intents.FLAGS.GUILD_MEMBERS,
 ] });
-const pxls = new Pxls({ "buffers": [0, 2] });
+const pxls = new Pxls({ "buffers": [BufferType.CANVAS, BufferType.PLACEMAP] });
 
 const SERVERS: Map<string, ServerHandler> = new Map();
 const init = async () => {

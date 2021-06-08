@@ -2,7 +2,7 @@ import { promises as fs } from "fs";
 import * as path from "path";
 
 import { DiscordAPIError, Guild, Message, Constants } from "discord.js";
-import Pxls = require("pxls");
+import Pxls from "pxls";
 import * as is from "check-types";
 
 import Summary from "./summary";

@@ -6,11 +6,10 @@ import sharp = require("sharp");
 import got from "got";
 import is = require("check-types");
 
-import Pxls = require("pxls");
+import Pxls from "pxls";
 import Histoire from "./history";
 
 import { Interval, humanTime, zip, hashParams, hasProperty } from "./util";
-import { rgb } from "chalk";
 
 const compressRGB = (arr: ArrayLike<number>) => (arr[0] << 16) | (arr[1] << 8) | arr[0];
 
