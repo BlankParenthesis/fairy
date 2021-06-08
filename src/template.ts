@@ -86,6 +86,9 @@ const decodeTemplateImage = async (
 	url: string, 
 	tw: number | undefined
 ) => {
+	// TODO: support filesize limits
+	// TODO: configuration for trusted domains and/or proxying downloads
+	// basically, this is susceptible malicious input currently and that's not good.
 	const buffer = (await got(url, { "responseType": "buffer" })).body;
 	const im = sharp(buffer);
 	const meta = await im.metadata();

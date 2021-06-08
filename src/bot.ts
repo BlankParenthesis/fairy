@@ -79,6 +79,7 @@ const init = async () => {
 	await application.commands.fetch();
 	await Promise.all(Array.from(commands.entries()).map(async ([name, command]) => {
 		const applicationCommand = application.commands.cache.find(c => c.name === name);
+		// TODO: check if command needs updating rather than just checking it's existence
 		if(!applicationCommand) {
 			try {
 				await command.create(application.commands);
@@ -192,6 +193,7 @@ fairy.on("interaction", async interaction => {
 					}
 				}
 			} else {
+				// TODO: support DMs
 				interaction.reply("DMs are not supported at this time.");
 			}
 		}
