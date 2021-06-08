@@ -3,7 +3,7 @@ Fairy
 Fairy is a [Discord](https://discord.com) bot for template tracking on [pxls.space](https://pxls.space).
 
 The primary function of this bot was as personalized bot for the Pxls faction [The Cirno Embassy](https://perfectfreeze.art), but it works as a generic bot too. 
-This code is run live under a bot with the name *Reimu* (specifially `Reimu#9004` with user ID `510854226876956723`).
+This code is run live under a bot with the name *Reimu* (specifically `Reimu#9004` with user ID `510854226876956723`).
 
 While initially this project included several unrelated functions in one program, it has since become solely about template tracking.
 
@@ -16,7 +16,7 @@ This should be done by running `npm install`.
 Before running the bot, it should be configured by creating a `config.json` file.
 The file `example-config.json` can be used as a baseline.
 
-As this is a Typescript project, it must be transpiled into Javascript before it will function.
+As this is a Typescript project, it must be compiled into Javascript before it will function.
 Ensure that `tsc` — the Typescript compiler — is installed then run `npm run build`.
 This should create a `lib` directory with all the compiled files inside.
 
