@@ -76,8 +76,8 @@ const init = async () => {
 	}
 
 	const application = await fairy.application.fetch();
+	await application.commands.fetch();
 	await Promise.all(Array.from(commands.entries()).map(async ([name, command]) => {
-		await application.commands.fetch();
 		const applicationCommand = application.commands.cache.find(c => c.name === name);
 		if(!applicationCommand) {
 			try {
