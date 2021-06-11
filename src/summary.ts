@@ -40,7 +40,9 @@ export default class Summary {
 	}
 
 	async update(final = false) {
-		await this.message.edit(Summary.embed(this.serverHandler, this.templates, final));
+		await this.message.edit({ 
+			"embed": Summary.embed(this.serverHandler, this.templates, final),
+		});
 	}
 
 	async modify(templates: string[]) {
