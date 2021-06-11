@@ -189,7 +189,10 @@ fairy.on("interaction", async interaction => {
 					if(interaction.replied || interaction.deferred) {
 						await interaction.editReply(errorResponse);
 					} else {
-						await interaction.reply(errorResponse, { "ephemeral": true });
+						await interaction.reply({
+							"content": errorResponse,
+							"ephemeral": true,
+						});
 					}
 				}
 			} else {

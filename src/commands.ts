@@ -243,10 +243,10 @@ export default new Map([
 
 			await summary.modify(templates);
 
-			await interaction.reply(
-				`Summary will now show ${templates.map(t => `“${t}”`).join(", ")}.`,
-				{ "ephemeral": true }
-			);
+			await interaction.reply({
+				"content": `Summary will now show ${templates.map(t => `“${t}”`).join(", ")}.`,
+				"ephemeral": true,
+			});
 		} else if(subCommand.name === "freeze") {
 			const summaryId = requireStringOption(subCommand);
 			const summary = parseSummary(summaryId, server);
@@ -257,7 +257,10 @@ export default new Map([
 
 			await server.dropSummary(summary);
 
-			interaction.reply("Summary will no longer update.", { "ephemeral": true });
+			interaction.reply({
+				"content": "Summary will no longer update.", 
+				"ephemeral": true,
+			});
 		}
 	}),
 ].map(c => [c.name, c]));
