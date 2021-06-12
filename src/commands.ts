@@ -103,6 +103,8 @@ const parseSummary = (input: string, server: Server) => {
 };
 
 export default new Map([
+	// TODO: template list
+	// TODO: template post {template_name}
 	new Command("template", "Manage templates tracked for this server.", [
 		{
 			"type": ApplicationCommandOptionTypes.SUB_COMMAND,
@@ -136,21 +138,29 @@ export default new Map([
 		}
 		
 		if(!memberIsMod(interaction.member as GuildMember)) {
-			await interaction.reply(LACKS_PERMISSIONS_RESPONSE);
+			await interaction.reply({
+				"content": LACKS_PERMISSIONS_RESPONSE,
+				"ephemeral": true,
+			});
 			return;
 		}
 
 		const [subCommand] = interaction.options.values();
 
 		if(subCommand.name === "add") {
-			await interaction.defer();
+			await interaction.defer({
+				"ephemeral": true,
+			});
 			const url = requireStringOption(subCommand);
 			const { name, template } = await server.createTemplate(url);
 			await interaction.editReply(`Template “[${name}](${url})” added (${template.size} pixels).`);
 		} else if(subCommand.name === "remove") {
 			const search = requireStringOption(subCommand);
 			const { name } = await server.removeTemplate(search);
-			await interaction.reply(`Template “${name}” removed.`);
+			await interaction.reply({
+				"content": `Template “${name}” removed.`,
+				"ephemeral": true,
+			});
 		} else {
 			throw new Error(`Unexpected subcommand “${subCommand.name}”`);
 		}
