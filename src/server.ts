@@ -87,6 +87,7 @@ export default class ServerHandler {
 		}));
 	}
 
+	// TODO: limit number of templates — either by total or by size.
 	async createTemplate(url: string) {
 		const name = hashParams(url).get("title");
 

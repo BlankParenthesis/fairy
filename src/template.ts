@@ -81,16 +81,22 @@ const decodeTemplateData = (
 	return canvasImage;
 };
 
+const MEGABYTE = 10 ** 6;
+
 const decodeTemplateImage = async (
 	palette: MappedPalette, 
 	url: string, 
 	tw: number | undefined
 ) => {
-	// TODO: support filesize limits
 	// TODO: configuration for trusted domains and/or proxying downloads
 	// basically, this is susceptible malicious input currently and that's not good.
-	const buffer = await (await fetch(url)).buffer();
-	const im = sharp(buffer);
+	const template = await fetch(url, {
+		// full global template, custom symbols: 6.7 MB
+		// 8 MB is more than enough
+		"size": 8 * MEGABYTE,
+	});
+
+	const im = sharp(await template.buffer());
 	const meta = await im.metadata();
 
 	if(is.undefined(meta.width)) {
