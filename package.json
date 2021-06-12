@@ -1,6 +1,6 @@
 {
 	"name": "fairy",
-	"version": "1.4.3",
+	"version": "1.4.4",
 	"description": "A pxls.space template tracking bot for Discord",
 	"keywords": [
 		"pxls",
@@ -44,7 +44,6 @@
 		"check-types": "^11.1.2",
 		"discord.js": "github:discordjs/discord.js",
 		"erlpack": "^0.1.0",
-		"got": "^11.0.0",
 		"libsodium-wrappers": "^0.7.0",
 		"long": "^4.0.0",
 		"nan": "^2.0.0",
@@ -56,9 +55,11 @@
 		"zlib-sync": "^0.1.0"
 	},
 	"devDependencies": {
+		"@types/node-fetch": "^2.5.10",
 		"@types/pngjs": "^6.0.0",
 		"@types/sharp": "^0.28.3",
 		"eslint": "^7.0.0",
+		"node-fetch": "^2.6.1",
 		"typescript": "^4.3.2"
 	},
 	"engines": {

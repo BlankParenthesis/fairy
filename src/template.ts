@@ -3,7 +3,7 @@ import * as path from "path";
 
 import { PNG } from "pngjs";
 import sharp = require("sharp");
-import got from "got";
+import fetch from "node-fetch";
 import is = require("check-types");
 
 import { Pxls, TRANSPARENT_PIXEL } from "pxls";
@@ -89,7 +89,7 @@ const decodeTemplateImage = async (
 	// TODO: support filesize limits
 	// TODO: configuration for trusted domains and/or proxying downloads
 	// basically, this is susceptible malicious input currently and that's not good.
-	const buffer = (await got(url, { "responseType": "buffer" })).body;
+	const buffer = await (await fetch(url)).buffer();
 	const im = sharp(buffer);
 	const meta = await im.metadata();
 
