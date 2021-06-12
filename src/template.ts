@@ -1,5 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
+import { URL } from "url";
 
 import { PNG } from "pngjs";
 import sharp = require("sharp");
@@ -10,6 +11,46 @@ import { Pxls, TRANSPARENT_PIXEL } from "pxls";
 import Histoire from "./history";
 
 import { Interval, humanTime, zip, hashParams, hasProperty } from "./util";
+
+// TODO: unified config
+/* eslint-disable-next-line @typescript-eslint/no-var-requires */
+const config: unknown = require(path.resolve(__dirname, "..", "config.json"));
+
+enum FilterType {
+	DENY = "DENY",
+	ALLOW = "ALLOW",
+}
+
+interface DomainFilter {
+	type: FilterType;
+	domains: string[];
+}
+
+const configTemplate = {
+	"download": {
+		"filter": {
+			"type": "",
+			"domains": [""],
+		},
+	},
+};
+
+const domainFilter = ((config: unknown): DomainFilter => {
+	if(is.like(config, configTemplate)
+		&& config.download.filter.type.toUpperCase() in FilterType
+	) {
+		return { 
+			"type": (FilterType as any)[config.download.filter.type.toUpperCase()],
+			"domains": config.download.filter.domains,
+		};
+	} else {
+		console.warn("Config domain filter format invalid");
+		return { 
+			"type": FilterType.DENY, 
+			"domains": [],
+		};
+	}
+})(config);
 
 const compressRGB = (arr: ArrayLike<number>) => (arr[0] << 16) | (arr[1] << 8) | arr[0];
 
@@ -85,11 +126,22 @@ const MEGABYTE = 10 ** 6;
 
 const decodeTemplateImage = async (
 	palette: MappedPalette, 
-	url: string, 
+	url: URL, 
 	tw: number | undefined
 ) => {
-	// TODO: configuration for trusted domains and/or proxying downloads
-	// basically, this is susceptible malicious input currently and that's not good.
+	const urlIsKnown = domainFilter.domains.includes(url.hostname);
+	const wantKnownURL = domainFilter.type === FilterType.ALLOW;
+
+	if(urlIsKnown !== wantKnownURL) {
+		let message = `Untrusted template source “${url.hostname}”`;
+
+		if(domainFilter.type === FilterType.ALLOW) {
+			message += ` (trusted domains: ${domainFilter.domains.join(", ")})`;
+		}
+
+		throw new Error(message);
+	}
+
 	const template = await fetch(url, {
 		// full global template, custom symbols: 6.7 MB
 		// 8 MB is more than enough
@@ -527,7 +579,7 @@ export default class Template {
 
 		const { width, height, data } = await decodeTemplateImage(
 			mapPalette(pxls.palette), 
-			template,
+			new URL(template),
 			is.undefined(tw) ? undefined : parseInt(tw)
 		);
 

@@ -1,4 +1,14 @@
 {
 	"loglevel": ["LOG", "INFO", "ERROR", "WARN", "DEBUG"],
-	"token": "abcdef.123.456789"
+	"token": "abcdef.123.456789",
+	"download": {
+		"filter": {
+			"type": "ALLOW",
+			"domains": [
+				"pxlsfiddle.com", 
+				"i.imgur.com", 
+				"cdn.discordapp.com"
+			]
+		}
+	}
 }

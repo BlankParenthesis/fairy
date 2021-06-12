@@ -11,6 +11,7 @@ import Repl, { LogLevel } from "./repl";
 import commands from "./commands";
 import { Interval, hasProperty } from "./util";
 
+// TODO: proper config
 /* eslint-disable-next-line @typescript-eslint/no-var-requires */
 const config: unknown = require(path.resolve(__dirname, "..", "config.json"));
 
