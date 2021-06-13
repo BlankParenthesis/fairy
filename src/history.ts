@@ -61,8 +61,6 @@ export default class Histoire {
 	}
 
 	private fillData(addValue: number, now = Date.now()) {
-		console.debug(addValue);
-
 		const lastAddress = Histoire.address(this.lastWriteTime);
 		const currentAddress = Histoire.address(now);
 
