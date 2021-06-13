@@ -10,7 +10,7 @@ import is = require("check-types");
 import { Pxls, TRANSPARENT_PIXEL } from "pxls";
 import Histoire from "./history";
 
-import { Interval, humanTime, zip, hashParams, hasProperty } from "./util";
+import { Interval, humanTime, zip, hashParams, hasProperty, sleep } from "./util";
 
 // TODO: unified config
 /* eslint-disable-next-line @typescript-eslint/no-var-requires */
@@ -108,7 +108,10 @@ const determinePalleteInArea = (
 	return votes[bestI] > 0 ? bestI : 255;
 };
 
-const decodeTemplateData = (
+// can be tuned — this is the initial arbitrary value
+const MAX_SIMULTANEOUS_AREA_DECODES = 1000;
+
+const decodeTemplateData = async (
 	palette: MappedPalette, 
 	w: number, 
 	h: number, 
@@ -116,8 +119,17 @@ const decodeTemplateData = (
 	scale: number
 ) => {
 	const canvasImage = new Uint8Array(w * h);
+	let counter = 0;
+
 	for(let i = 0; i < w * h; i++) {
 		canvasImage.set([determinePalleteInArea(palette, w, h, data, scale, i)], i);
+
+		counter = counter + 1;
+		if(counter > MAX_SIMULTANEOUS_AREA_DECODES) {
+			counter = 0;
+			// yield the thread — let other things work
+			await sleep(0);
+		}
 	}
 	return canvasImage;
 };
@@ -152,7 +164,7 @@ const decodeTemplateImage = async (
 	const meta = await im.metadata();
 
 	if(is.undefined(meta.width)) {
-		throw new Error("Template image defines no width");
+		throw new Error("Template i mage defines no width");
 	}
 	if(is.undefined(meta.height)) {
 		throw new Error("Template image defines no height");
@@ -165,7 +177,7 @@ const decodeTemplateImage = async (
 
 	const width = meta.width / ratio;
 	const height = meta.height / ratio; 
-	const data = decodeTemplateData(
+	const data = await decodeTemplateData(
 		palette, 
 		width,
 		height, 
@@ -626,7 +638,7 @@ export default class Template {
 			throw new Error("Template image defines no height");
 		}
 
-		const data = decodeTemplateData(
+		const data = await decodeTemplateData(
 			mapPalette(pxls.palette),
 			width,
 			height,
