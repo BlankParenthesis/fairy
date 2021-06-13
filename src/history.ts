@@ -61,6 +61,8 @@ export default class Histoire {
 	}
 
 	private fillData(addValue: number, now = Date.now()) {
+		console.debug(addValue);
+
 		const lastAddress = Histoire.address(this.lastWriteTime);
 		const currentAddress = Histoire.address(now);
 
@@ -98,7 +100,7 @@ export default class Histoire {
 
 	recentHits(period: number) {
 		const now = Date.now();
-		return this.range(now - period, now).reduce(sum, 0);
+		return this.range(now - period, this.lastWriteTime).reduce(sum, 0);
 	}
 
 	backfill(data: Uint16Array, dataTime: number) {
