@@ -217,7 +217,10 @@ export default new Map([
 		}
 
 		if(!memberIsMod(interaction.member as GuildMember)) {
-			await interaction.reply(LACKS_PERMISSIONS_RESPONSE);
+			await interaction.reply({
+				"content": LACKS_PERMISSIONS_RESPONSE,
+				"ephemeral": true,
+			});
 			return;
 		}
 
@@ -229,7 +232,9 @@ export default new Map([
 
 			const embed = Summary.embed(server, templates);
 
-			await interaction.reply(embed);
+			await interaction.reply({
+				"embeds": [embed],
+			});
 			const message = await interaction.fetchReply();
 
 			const castToMessage = (message: any): message is Message => message instanceof Message;
