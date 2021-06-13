@@ -98,7 +98,8 @@ export default class Histoire {
 
 	recentHits(period: number) {
 		const now = Date.now();
-		return this.range(now - period, this.lastWriteTime).reduce(sum, 0);
+		const rangeEnd = Math.min(now, this.lastWriteTime + Interval.MINUTE);
+		return this.range(now - period, rangeEnd).reduce(sum, 0);
 	}
 
 	backfill(data: Uint16Array, dataTime: number) {
