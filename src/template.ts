@@ -155,9 +155,8 @@ const decodeTemplateImage = async (
 	}
 
 	const template = await fetch(url, {
-		// full global template, custom symbols: 6.7 MB
-		// 8 MB is more than enough
-		"size": 8 * MEGABYTE,
+		// full global template, custom symbols: ~~6.7 MB~~ about 10MB (6.7 was webp)
+		"size": 16 * MEGABYTE,
 	});
 
 	const im = sharp(await template.buffer());
