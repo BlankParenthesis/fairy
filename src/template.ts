@@ -192,6 +192,8 @@ const mapPalette = (palette: PxlsColor[]): MappedPalette => new Map(
 		.map(e => [compressRGB(e[1].values), e[0]])
 );
 
+const HISORY_SIZE = (Interval.DAY * 7 / Interval.MINUTE);
+
 // TODO: cache things — many methods of this perform expensive operations which could probably be cached.
 export default class Template {
 	private pxls: Pxls;
@@ -371,6 +373,10 @@ export default class Template {
 
 	get size() {
 		return this.data.filter(b => b !== TRANSPARENT_PIXEL).length;
+	}
+
+	get space() {
+		return this.width * this.height + 2 * HISORY_SIZE;
 	}
 
 	get placeableSize() {

@@ -8,7 +8,11 @@ import * as is from "check-types";
 import Summary from "./summary";
 import Template from "./template";
 
-import { hashParams, escapeRegExp, hasProperty } from "./util";
+import { hashParams, escapeRegExp, hasProperty, sum } from "./util";
+
+// TODO: config option for space limit
+// 25 MB of memory space in major buffers
+const SPACE_LIMIT = 25 * 10 ** 6;
 
 export default class ServerHandler {
 	private pxls: Pxls;
@@ -50,6 +54,7 @@ export default class ServerHandler {
 		}
 	}
 
+	// TODO: limit number total templates between summaries
 	async addSummary(message: Message, templates: string[]) {
 		this.summaries.push(new Summary(this, message, templates));
 	}
@@ -87,7 +92,6 @@ export default class ServerHandler {
 		}));
 	}
 
-	// TODO: limit number of templates — either by total or by size.
 	async createTemplate(url: string) {
 		const name = hashParams(url).get("title");
 
@@ -95,7 +99,25 @@ export default class ServerHandler {
 			throw new Error("Template requires a title");
 		}
 
+		let usedSpace = Array.from(this.templates.values())
+			.map(t => t.space)
+			.reduce(sum);
+
+		const existingTemplate = this.templates.get(name);
+		if(!is.undefined(existingTemplate)) {
+			usedSpace = usedSpace - existingTemplate.space;
+		}
+
 		const template = await Template.download(this.pxls, url);
+
+		if(template.space + usedSpace > SPACE_LIMIT) {
+			throw new Error(
+				"Server memory limit reached — " +
+				"use smaller templates if possible " +
+				`(need ${template.space} bytes, used ${usedSpace} of ${SPACE_LIMIT} bytes)`
+			);
+		} 
+
 		await template.save(path.resolve(this.templateDir, `${name}.png`));
 		this.templates.set(name, template);
 

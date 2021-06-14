@@ -170,6 +170,9 @@ fairy.on("guildDelete", guild => {
 });
 
 fairy.on("interaction", async interaction => {
+	// TODO: ratelimit users —
+	// something like 50 templates every 10 minutes
+	// and 500 templates a day
 	if(interaction.isCommand()) {
 		const command = commands.get(interaction.commandName);
 		if(!is.undefined(command)) {
