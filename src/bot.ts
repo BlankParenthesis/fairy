@@ -80,8 +80,13 @@ const init = async () => {
 	await application.commands.fetch();
 	await Promise.all(Array.from(commands.entries()).map(async ([name, command]) => {
 		const applicationCommand = application.commands.cache.find(c => c.name === name);
-		// TODO: check if command needs updating rather than just checking it's existence
-		if(!applicationCommand) {
+		if(applicationCommand) {
+			if(!command.like(applicationCommand)) {
+				await applicationCommand.delete();
+				await command.create(application.commands);
+				console.debug(`Updated command “${name}”`);
+			}
+		} else {
 			try {
 				await command.create(application.commands);
 			} catch(e) {

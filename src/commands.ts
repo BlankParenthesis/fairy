@@ -3,13 +3,14 @@ import {
 	Constants, 
 	Permissions, 
 	CommandInteraction, 
+	ApplicationCommand,
 	ApplicationCommandManager, 
 	GuildApplicationCommandManager,
 	ApplicationCommandOptionData,
+	ApplicationCommandOptionChoice,
 	GuildMember,
 	CommandInteractionOption,
 	Message,
-	APIMessage,
 	Collection,
 } from "discord.js";
 
@@ -17,6 +18,7 @@ const { ApplicationCommandOptionTypes } = Constants;
 
 import Summary from "./summary";
 import Server from "./server";
+import { zip } from "./util";
 
 class Command {
 	readonly name: string;
@@ -52,6 +54,66 @@ class Command {
 			options, 
 			defaultPermission,
 		});
+	}
+
+	static choicesAlike(as?: ApplicationCommandOptionChoice[], bs?: ApplicationCommandOptionChoice[]) {
+		if(is.undefined(as) || is.undefined(bs)) {
+			return as === bs;
+		}
+
+		if(as.length !== bs.length) {
+			return false;
+		}
+
+		for(const [a, b] of zip(as, bs)) {
+			const conditions = [
+				a.name === b.name,
+				a.value === b.value,
+			];
+
+			if(!conditions.every(_ => _)) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	static optionsAlike(as?: ApplicationCommandOptionData[], bs?: ApplicationCommandOptionData[]) {
+		if(is.undefined(as) || is.undefined(bs)) {
+			return as === bs;
+		}
+
+		if(as.length !== bs.length) {
+			return false;
+		}
+
+		for(const [a, b] of zip(as, bs)) {
+			const conditions = [
+				// The type could be the key or the value part of the enum.
+				// the type definition for discord.js assures me that ApplicationCommandOptionTypes
+				// is ambient. In testing, it was not. Basically: 
+				// FIXME: this could break later
+				a.type === b.type || a.type === (Constants as any).ApplicationCommandOptionTypes[b.type],
+				a.name === b.name,
+				a.description === b.description,
+				a.required === b.required,
+				Command.choicesAlike(a.choices, b.choices),
+				Command.optionsAlike(a.options, b.options),
+			];
+
+			if(!conditions.every(_ => _)) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	like(command: ApplicationCommand) {
+		return this.name === command.name
+			&& this.description === command.description
+			&& Command.optionsAlike(this.options, command.options);
 	}
 }
 
