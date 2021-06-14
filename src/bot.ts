@@ -1,7 +1,7 @@
 import * as path from "path";
 import * as util from "util";
 
-import { Client, Intents } from "discord.js";
+import { Client, Intents, Snowflake } from "discord.js";
 import * as chalk from "chalk";
 import { Pxls, BufferType } from "@blankparenthesis/pxlsspace";
 import is = require("check-types");
@@ -9,7 +9,7 @@ import is = require("check-types");
 import ServerHandler from "./server";
 import Repl, { LogLevel } from "./repl";
 import commands from "./commands";
-import { Interval, hasProperty } from "./util";
+import { Interval, hasProperty, humanTime } from "./util";
 
 import config from "./config";
 
@@ -138,15 +138,104 @@ fairy.on("guildDelete", guild => {
 	}
 });
 
+class Limiter<T> {
+	private storedUses: Map<T, number> = new Map();
+
+	readonly limit: number;
+	readonly interval: number; 
+
+	constructor(limit: number, interval: number) {
+		this.limit = limit;
+		this.interval = interval;
+
+		setTimeout(() => {
+			setInterval(
+				() => this.refresh(), 
+				this.interval
+			);
+		}, this.timeUntilRefresh);
+	}
+
+	private refresh() {
+		this.storedUses.clear();
+	}
+
+	private uses(user: T) {
+		let uses = this.storedUses.get(user);
+
+		if(is.undefined(uses)) {
+			uses = 0;
+		}
+
+		return uses;
+	}
+
+	canUse(user: T) {
+		return this.uses(user) < this.limit;
+	}
+
+	use(user: T) {
+		this.storedUses.set(user, this.uses(user) + 1);
+	}
+
+	get timeUntilRefresh() {
+		return this.limit - Date.now() % this.limit;
+	}
+}
+
+const MAX_RECENT_INTERACTIONS = 50;
+const MAX_OLD_INTERACTIONS = 500;
+
+const userLimiters: Limiter<Snowflake>[] = [
+	new Limiter(MAX_RECENT_INTERACTIONS, Interval.MINUTE * 10),
+	new Limiter(MAX_OLD_INTERACTIONS, Interval.DAY),
+];
+
+const serverLimiters: Limiter<Snowflake>[] = [
+	new Limiter(MAX_RECENT_INTERACTIONS * 4, Interval.MINUTE * 10),
+	new Limiter(MAX_OLD_INTERACTIONS * 4, Interval.DAY),
+];
+
 fairy.on("interaction", async interaction => {
-	// TODO: ratelimit users —
-	// something like 50 templates every 10 minutes
-	// and 500 templates a day
 	if(interaction.isCommand()) {
 		const command = commands.get(interaction.commandName);
 		if(!is.undefined(command)) {
+			const userId = interaction.user.id;
+
+			const limitedUserLimiter = userLimiters.find(l => !l.canUse(userId));
+
+			if(!is.undefined(limitedUserLimiter)) {
+				const readableCooldown = humanTime(limitedUserLimiter.timeUntilRefresh);
+
+				await interaction.reply({
+					"content": "You've use too many of my commands recently; "
+						+ `wait ${readableCooldown} before trying again.`,
+					"ephemeral": true,
+				});
+				return;
+			}
+
+			userLimiters.forEach(l => l.use(userId));
+
 			if(interaction.guildID) {
-				const server = SERVERS.get(interaction.guildID);
+				const guildId = interaction.guildID;
+
+				const server = SERVERS.get(guildId);
+
+				const limitedServerLimiter = serverLimiters.find(l => !l.canUse(guildId));
+
+				if(!is.undefined(limitedServerLimiter)) {
+					const readableCooldown = humanTime(limitedServerLimiter.timeUntilRefresh);
+	
+					await interaction.reply({
+						"content": "Too many of my commands have been used in this server recently; "
+							+ `wait ${readableCooldown} before trying again.`,
+						"ephemeral": true,
+					});
+					return;
+				}
+	
+				userLimiters.forEach(l => l.use(userId));
 
 				try {
 					if(server) {
