@@ -12,6 +12,7 @@ import {
 	CommandInteractionOption,
 	Message,
 	Collection,
+	MessageEmbed,
 } from "discord.js";
 
 const { ApplicationCommandOptionTypes } = Constants;
@@ -165,7 +166,6 @@ const parseSummary = (input: string, server: Server) => {
 };
 
 export default new Map([
-	// TODO: template list
 	// TODO: template post {template_name}
 	new Command("template", "Manage templates tracked for this server.", [
 		{
@@ -193,6 +193,11 @@ export default new Map([
 					"required": true,
 				},
 			],
+		},
+		{
+			"type": ApplicationCommandOptionTypes.SUB_COMMAND,
+			"name": "list",
+			"description": "Show tracked templates.",
 		},
 	], async (interaction, server) => {
 		if(interaction.member === null) {
@@ -222,6 +227,24 @@ export default new Map([
 			await interaction.reply({
 				"content": `Template “${name}” removed.`,
 				"ephemeral": true,
+			});
+		} else if(subCommand.name === "list") {
+			await interaction.defer({
+				"ephemeral": true,
+			});
+
+			const embed = new MessageEmbed();
+			embed.setTitle("Templates");
+			embed.setDescription(`Tracking ${server.templates.size} templates for this server:`);
+			embed.setColor([179, 0, 0]);
+
+			for(const [name, template] of server.templates.entries()) {
+				// TODO: ensure list stays within Discord's embed count limit
+				embed.addField(name, `${template.size} pixels`);
+			}
+
+			await interaction.editReply({
+				"embeds": [embed],
 			});
 		} else {
 			throw new Error(`Unexpected subcommand “${subCommand.name}”`);

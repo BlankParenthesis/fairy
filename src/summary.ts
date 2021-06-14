@@ -26,6 +26,7 @@ export default class Summary {
 			embedObject.setFooter("updated every minute");
 		}
 
+		// TODO: ensure list stays within Discord's embed count limit
 		templates.map(t => serverHandler.findTemplate(t))
 			.filter((t): t is Exclude<typeof t, null> => t !== null)
 			.forEach(({ name, template }) => {
