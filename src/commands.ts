@@ -227,12 +227,15 @@ export default new Map([
 		const [subCommand] = interaction.options.values();
 
 		if(subCommand.name === "post") {
+			await interaction.defer();
+
 			const templatesInput = requireStringOption(subCommand);
 			const templates = parseTemplates(templatesInput);
 
 			const embed = Summary.embed(server, templates);
 
-			await interaction.reply({
+			// TODO: check errors on addSummary before this (somehow)
+			await interaction.editReply({
 				"embeds": [embed],
 			});
 			const message = await interaction.fetchReply();

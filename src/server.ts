@@ -10,9 +10,12 @@ import Template from "./template";
 
 import { hashParams, escapeRegExp, hasProperty, sum } from "./util";
 
-// TODO: config option for space limit
+// TODO: config option for space limit and summary limit
 // 25 MB of memory space in major buffers
 const SPACE_LIMIT = 25 * 10 ** 6;
+// 100 seems like a reasonably amount that might actually get used.
+// if it ends up being too stressful, look at optimizing template summary generation first.
+export const SUMMARY_LIMIT = 5;
 
 export default class ServerHandler {
 	private pxls: Pxls;
@@ -54,8 +57,19 @@ export default class ServerHandler {
 		}
 	}
 
-	// TODO: limit number total templates between summaries
 	async addSummary(message: Message, templates: string[]) {
+		const totalSummarizations = this.summaries
+			.map(s => s.size)
+			.reduce(sum, 0);
+		
+		if(totalSummarizations + templates.length > SUMMARY_LIMIT) {
+			throw new Error(
+				"Server summary limit reached; " +
+				`no more than ${SUMMARY_LIMIT} templates between all summaries ` +
+				"(including duplicates)"
+			);
+		}
+
 		this.summaries.push(new Summary(this, message, templates));
 	}
 
@@ -101,7 +115,7 @@ export default class ServerHandler {
 
 		let usedSpace = Array.from(this.templates.values())
 			.map(t => t.space)
-			.reduce(sum);
+			.reduce(sum, 0);
 
 		const existingTemplate = this.templates.get(name);
 		if(!is.undefined(existingTemplate)) {

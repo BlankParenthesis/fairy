@@ -1,8 +1,8 @@
 import is = require("check-types");
 import { MessageEmbed, Message, Guild, TextChannel, DiscordAPIError, Constants } from "discord.js";
 
-import ServerHandler from "./server";
-import { hasProperty, sleep, Interval } from "./util";
+import ServerHandler, { SUMMARY_LIMIT } from "./server";
+import { hasProperty, sleep, Interval, sum } from "./util";
 
 export default class Summary {
 	private readonly serverHandler: ServerHandler;
@@ -39,6 +39,10 @@ export default class Summary {
 		return this.message.id;
 	}
 
+	get size() {
+		return this.templates.length;
+	}
+
 	async update(final = false) {
 		await this.message.edit({ 
 			"embed": Summary.embed(this.serverHandler, this.templates, final),
@@ -46,6 +50,19 @@ export default class Summary {
 	}
 
 	async modify(templates: string[]) {
+		// TODO: reduce code duplication with server
+		const totalSummarizations = this.serverHandler.summaries
+			.map(s => s.size)
+			.reduce(sum, 0) - this.templates.length;
+		
+		if(totalSummarizations + templates.length > SUMMARY_LIMIT) {
+			throw new Error(
+				"Server summary limit reached; " +
+				`no more than ${SUMMARY_LIMIT} templates between all summaries ` +
+				"(including duplicates)"
+			);
+		}
+
 		this.templates = templates;
 		await this.update();
 	}
