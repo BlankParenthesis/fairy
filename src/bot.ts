@@ -70,6 +70,8 @@ const fairy = new Client({ "intents": [
 ] });
 const pxls = new Pxls({ "buffers": [BufferType.CANVAS, BufferType.PLACEMAP] });
 
+pxls.on("error", e => console.error("Pxls error: ", e));
+
 const SERVERS: Map<string, ServerHandler> = new Map();
 const init = async () => {
 	if(fairy.application === null) {
