@@ -192,9 +192,27 @@ const mapPalette = (palette: PxlsColor[]): MappedPalette => new Map(
 		.map(e => [compressRGB(e[1].values), e[0]])
 );
 
-const HISORY_SIZE = (Interval.DAY * 7 / Interval.MINUTE);
+const HISTORY_SIZE = (Interval.DAY * 7 / Interval.MINUTE);
 
-// TODO: cache things — many methods of this perform expensive operations which could probably be cached.
+class Cache {
+	private store = new Map<string, any>();
+
+	cache<T>(key: string, compute: () => T): T {
+		let value = this.store.get(key) as T;
+
+		if(is.undefined(value)) {
+			value = compute();
+			this.store.set(key, value);
+		}
+
+		return value;
+	}
+	
+	invalidate() {
+		this.store.clear();
+	}
+}
+
 export default class Template {
 	private pxls: Pxls;
 
@@ -214,6 +232,9 @@ export default class Template {
 	private croire = new Histoire();
 
 	private lastCompletion: number;
+
+	private progressCache = new Cache();
+	private propertyCache = new Cache();
 
 	constructor(
 		pxls: Pxls, 
@@ -269,6 +290,7 @@ export default class Template {
 	}
 
 	sync(time = Date.now()) {
+		this.progressCache.invalidate();
 		const progress = this.rawProgress;
 		const goodValueDelta = Math.max(progress - this.lastCompletion, 0);
 		const badValueDelta = Math.max(this.lastCompletion - progress, 0);
@@ -278,11 +300,13 @@ export default class Template {
 	}
 
 	goodPixel() {
+		this.progressCache.invalidate();
 		this.histy.hit(1);
 		this.lastCompletion += 1;
 	}
 
 	badPixel() {
+		this.progressCache.invalidate();
 		this.croire.hit(1);
 		this.lastCompletion -= 1;
 	}
@@ -372,40 +396,56 @@ export default class Template {
 	}
 
 	get size() {
-		return this.data.filter(b => b !== TRANSPARENT_PIXEL).length;
+		return this.propertyCache.cache(
+			"size", 
+			() => this.data.filter(b => b !== TRANSPARENT_PIXEL).length,
+		);
 	}
 
 	get space() {
-		return this.width * this.height + 2 * HISORY_SIZE;
+		return this.width * this.height + 2 * HISTORY_SIZE;
 	}
 
 	get placeableSize() {
-		return zip(this.data, this.placeableShadow)
-			.reduce(
-				(count, [pixel, placeable]) => 
-					(placeable === 0 && pixel !== TRANSPARENT_PIXEL)
-						? count + 1
-						: count,
-				0
-			);
+		return this.propertyCache.cache(
+			"placeableSize", 
+			() => zip(this.data, this.placeableShadow)
+				.reduce(
+					(count, [pixel, placeable]) => 
+						(placeable === 0 && pixel !== TRANSPARENT_PIXEL)
+							? count + 1
+							: count,
+					0
+				),
+		);
 	}
 
 	get badPixels() {
-		const data = zip(this.data, this.shadow);
-		const bads = [];
-		for(let x = 0; x < this.width; x++) {
-			for(let y = 0; y < this.height; y++) {
-				const i = x + (y * this.width);
-				if(data[i][0] !== TRANSPARENT_PIXEL && data[i][0] !== data[i][1]) {
-					bads.push([x + this.x, y + this.y]);
+		return this.progressCache.cache(
+			"badPixels",
+			() => {
+				const data = zip(this.data, this.shadow);
+				const bads = [];
+				for(let x = 0; x < this.width; x++) {
+					for(let y = 0; y < this.height; y++) {
+						const i = x + (y * this.width);
+						if(data[i][0] !== TRANSPARENT_PIXEL && data[i][0] !== data[i][1]) {
+							bads.push([x + this.x, y + this.y]);
+						}
+					}
 				}
+				return bads;
 			}
-		}
-		return bads;
+		);
 	}
 
 	get rawProgress() {
-		return zip(this.data, this.shadow).filter(v => v[1] !== TRANSPARENT_PIXEL && v[0] === v[1]).length;
+		return this.progressCache.cache(
+			"rawProgress",
+			() => zip(this.data, this.shadow)
+				.filter(v => v[1] !== TRANSPARENT_PIXEL && v[0] === v[1])
+				.length,
+		);
 	}
 
 	get progress() {
