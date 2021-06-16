@@ -62,6 +62,16 @@ const hasProperty = <
 	return Object.prototype.hasOwnProperty.call(object, property);
 };
 
+const hasTypedProperty = <
+	X extends {}, 
+	Y extends PropertyKey,
+	T,
+>(object: X, property: Y, guard: (_: unknown) => _ is T): object is X & Record<Y, T> => {
+	return Object.prototype.hasOwnProperty.call(object, property)
+			&& guard(object[property as keyof object]);
+};
+
+// TODO: export directly
 export {
 	sleep,
 	humanTime,
@@ -71,4 +81,5 @@ export {
 	hashParams,
 	escapeRegExp,
 	hasProperty,
+	hasTypedProperty,
 };

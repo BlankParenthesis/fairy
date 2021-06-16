@@ -12,45 +12,7 @@ import Histoire from "./history";
 
 import { Interval, humanTime, zip, hashParams, hasProperty, sleep } from "./util";
 
-// TODO: unified config
-/* eslint-disable-next-line @typescript-eslint/no-var-requires */
-const config: unknown = require(path.resolve(__dirname, "..", "config.json"));
-
-enum FilterType {
-	DENY = "DENY",
-	ALLOW = "ALLOW",
-}
-
-interface DomainFilter {
-	type: FilterType;
-	domains: string[];
-}
-
-const configTemplate = {
-	"download": {
-		"filter": {
-			"type": "",
-			"domains": [""],
-		},
-	},
-};
-
-const domainFilter = ((config: unknown): DomainFilter => {
-	if(is.like(config, configTemplate)
-		&& config.download.filter.type.toUpperCase() in FilterType
-	) {
-		return { 
-			"type": (FilterType as any)[config.download.filter.type.toUpperCase()],
-			"domains": config.download.filter.domains,
-		};
-	} else {
-		console.warn("Config domain filter format invalid");
-		return { 
-			"type": FilterType.DENY, 
-			"domains": [],
-		};
-	}
-})(config);
+import config, { FilterType } from "./config";
 
 const compressRGB = (arr: ArrayLike<number>) => (arr[0] << 16) | (arr[1] << 8) | arr[0];
 
@@ -141,14 +103,14 @@ const decodeTemplateImage = async (
 	url: URL, 
 	tw: number | undefined
 ) => {
-	const urlIsKnown = domainFilter.domains.includes(url.hostname);
-	const wantKnownURL = domainFilter.type === FilterType.ALLOW;
+	const urlIsKnown = config.download.filter.domains.includes(url.hostname);
+	const wantKnownURL = config.download.filter.type === FilterType.ALLOW;
 
 	if(urlIsKnown !== wantKnownURL) {
 		let message = `Untrusted template source “${url.hostname}”`;
 
-		if(domainFilter.type === FilterType.ALLOW) {
-			message += ` (trusted domains: ${domainFilter.domains.join(", ")})`;
+		if(config.download.filter.type === FilterType.ALLOW) {
+			message += ` (trusted domains: ${config.download.filter.domains.join(", ")})`;
 		}
 
 		throw new Error(message);

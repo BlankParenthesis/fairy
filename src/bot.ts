@@ -11,47 +11,9 @@ import Repl, { LogLevel } from "./repl";
 import commands from "./commands";
 import { Interval, hasProperty } from "./util";
 
-// TODO: proper config
-/* eslint-disable-next-line @typescript-eslint/no-var-requires */
-const config: unknown = require(path.resolve(__dirname, "..", "config.json"));
+import config from "./config";
 
-if(!is.object(config)) {
-	throw new Error("Malformed config");
-}
-
-const loglevel: Set<LogLevel> = ((levels: unknown): Set<LogLevel> => {
-	if(is.array(levels)) {
-		return new Set(levels.map(level => {
-			if(is.number(level)) {
-				return level;
-			} else if(is.string(level)) {
-				return (LogLevel as any)[level.toUpperCase()];
-			} else {
-				throw new Error(`Unknown log level: ${level}`);
-			}
-		}));
-	} else if(is.number(levels)) {
-		return new Set(Array(levels + 1).fill(0).map((_, i) => i));
-	} else if(is.string(levels)) {
-		const level = (LogLevel as any)[levels.toUpperCase()];
-		return new Set(Array(level + 1).fill(0).map((_, i) => i));
-	} else if(is.object(levels)) {
-		return new Set(Array.from(Object.entries(levels))
-			.filter(([k, v]) => v)
-			.map(([k, v]) => (LogLevel as any)[k.toUpperCase()]));
-	} else {
-		return new Set([
-			LogLevel.LOG,
-			LogLevel.INFO,
-			LogLevel.ERROR,
-			LogLevel.WARN,
-			LogLevel.DEBUG,
-		]);
-	}
-
-})(hasProperty(config, "loglevel") ? config.loglevel : null);
-
-const replServer = new Repl(loglevel);
+const replServer = new Repl(config.loglevel);
 
 // this is async, so it won't happen immediately
 replServer.setupHistory();
