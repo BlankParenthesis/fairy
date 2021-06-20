@@ -46,7 +46,7 @@ export default class ServerHandler {
 		for(const template of this.templates.values()) {
 			const templateColor = template.at(x, y);
 			if(templateColor === TRANSPARENT_PIXEL) {
-				return;
+				continue;
 			}
 
 			if(templateColor === color) {
@@ -132,6 +132,7 @@ export default class ServerHandler {
 			);
 		} 
 
+		// TODO: use file hash for saved templates
 		await template.save(path.resolve(this.templateDir, `${name}.png`));
 		this.templates.set(name, template);
 
@@ -286,6 +287,7 @@ export default class ServerHandler {
 		return path.resolve(this.baseDir, "templates");
 	}
 
+	// TODO: replace the server directory with a `${id}.json` file
 	get persistentDataPath() {
 		return path.resolve(this.baseDir, "persistent.json");
 	}
