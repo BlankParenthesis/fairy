@@ -2,7 +2,6 @@ import * as fs from "fs";
 import * as path from "path";
 import { URL } from "url";
 
-import { PNG } from "pngjs";
 import sharp = require("sharp");
 import fetch from "node-fetch";
 import is = require("check-types");
@@ -572,18 +571,14 @@ export default class Template {
 		return rgba;
 	}
 
-	get png() {
-		const image = new PNG({ "width": this.width, "height": this.height });
-		image.data.set(this.rgba);
-		return image.pack();
-	}
-
 	async save(file: string) {
-		return await new Promise((resolve, reject) => {
-			this.png.pipe(fs.createWriteStream(file))
-				.once("finish", resolve)
-				.once("error", reject);
-		});
+		const { width, height } = this;
+
+		await sharp(this.rgba as Buffer, { "raw": {
+			width,
+			height,
+			"channels": 4,
+		} }).toFile(file);
 	}
 
 	static async download(pxls: Pxls, templateURL: string) {
