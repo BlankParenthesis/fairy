@@ -9,7 +9,6 @@
 		"allowJs": false,
 		"strict": true,
 		"removeComments": true,
-		"strictPropertyInitialization": false,
 		"outDir": "./lib",
 		"skipLibCheck": true
 	},

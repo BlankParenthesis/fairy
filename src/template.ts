@@ -1,10 +1,13 @@
-import * as fs from "fs";
 import * as path from "path";
 import { URL } from "url";
 
 import sharp = require("sharp");
 import fetch from "node-fetch";
 import is = require("check-types");
+
+// disable tensorflow warnings
+process.env.TF_CPP_MIN_LOG_LEVEL = "2";
+import * as tf from "@tensorflow/tfjs-node";
 
 import { Pxls, TRANSPARENT_PIXEL } from "pxls";
 import Histoire from "./history";
@@ -13,92 +16,48 @@ import { Interval, humanTime, zip, hashParams, hasProperty, sleep } from "./util
 
 import config, { FilterType } from "./config";
 
-const compressRGB = (arr: ArrayLike<number>) => (arr[0] << 16) | (arr[1] << 8) | arr[0];
-
 interface PxlsColor {
 	name: string;
 	values: [number, number, number];
 }
 
-type MappedPalette = Map<number, string>;
-
-const determinePalleteInArea = (
-	palette: MappedPalette, 
-	w: number, 
-	h: number, 
-	data: Buffer, 
-	scale: number, 
-	i: number
-) => {
-	const votes = (new Array(palette.size)).fill(0);
-
-	const lineLength = w * scale;
-	// the offset in the row
-	const subpixelX = (i % w) * scale;
-	// the start address of the row
-	const subpixelY = Math.floor(i / w) * lineLength * scale;
-
-	for(let x = 0; x < scale; x++) {
-		for(let y = 0; y < scale; y++) {
-			if(i === 0 && x === 0 && y === 0 && data[3] < 64) {
-				// Zoda's pxlsFiddle puts a special pixel here to determine the scale, don't count such a pixel as a vote
-				continue;
-			}
-			// shift left (<< 2) multiplies by 4 — the number of bytes per pixel.
-			const subpixelAddresss = (subpixelX + subpixelY + x + (y * lineLength)) << 2;
-			if(data.readUInt8(subpixelAddresss + 3) === 0) {
-				// pixel is transparent
-				continue;
-			}
-			const pixel = compressRGB(data.slice(subpixelAddresss, subpixelAddresss + 3));
-			
-			if(palette.has(pixel)) {
-				// unknown -> number conversion is safe here because we checked "has" above.
-				votes[palette.get(pixel) as unknown as number] += 1;
-			}
-		}
-	}
-
-	let bestI = 0;
-	for(let j = 1; j < votes.length; j++) {
-		if(votes[j] > votes[bestI]) {
-			bestI = j;
-		}
-	}
-
-	return votes[bestI] > 0 ? bestI : 255;
-};
-
-// can be tuned — this is the initial arbitrary value
-const MAX_SIMULTANEOUS_AREA_DECODES = 1000;
-
-const decodeTemplateData = async (
-	palette: MappedPalette, 
+const detemplatize = async (
 	w: number, 
 	h: number, 
 	data: Buffer, 
 	scale: number
 ) => {
-	const canvasImage = new Uint8Array(w * h);
-	let counter = 0;
+	// we shape the tensor into rows of blocks.
+	// each block is shaped as rows of rgba pixels.
+	const tensor = tf.tensor(data, [h, scale, w, scale, 4], "int32");
 
-	for(let i = 0; i < w * h; i++) {
-		canvasImage.set([determinePalleteInArea(palette, w, h, data, scale, i)], i);
+	// reduce each block to its maximum.
+	// since this includes transparency, well-formed template images (those
+	// with only one color in each block) will logically pick the least 
+	// transparent pixel. That is, of course, presuming that transparent pixels
+	// are black…
+	const detemplatizedData = await tf.max(tensor, [1, 3]).data();
 
-		counter = counter + 1;
-		if(counter > MAX_SIMULTANEOUS_AREA_DECODES) {
-			counter = 0;
-			// yield the thread — let other things work
-			await sleep(0);
-		}
-	}
-	return canvasImage;
+	return new Int32Array(new Uint8Array(detemplatizedData).buffer);
+};
+
+const indexize = async (rgba: Int32Array, palette: PxlsColor[]) => {
+	const packedPalette = palette
+		// add alpha
+		.map(c => [...c.values, 255])
+		// pack the bytes of the palette in the same way as rgba
+		.map(v => new Int32Array(new Uint8Array(v).buffer)[0]);
+
+	return new Uint8Array(rgba.length)
+		// indexOf returns -1 for unknown values.
+		// -1 in a u8 is 255 — the value for a transparent pixel, how convenient!
+		.map((_, i) => packedPalette.indexOf(rgba[i]));
 };
 
 const MEGABYTE = 10 ** 6;
 
 const decodeTemplateImage = async (
-	palette: MappedPalette, 
+	palette: PxlsColor[], 
 	url: URL, 
 	tw: number | undefined
 ) => {
@@ -137,21 +96,17 @@ const decodeTemplateImage = async (
 
 	const width = meta.width / ratio;
 	const height = meta.height / ratio; 
-	const data = await decodeTemplateData(
-		palette, 
+	const rgba = await detemplatize(
 		width,
 		height, 
 		await im.raw().toBuffer(), 
 		ratio
 	);
 
+	const data = await indexize(rgba, palette);
+
 	return { width, height, data };
 };
-
-const mapPalette = (palette: PxlsColor[]): MappedPalette => new Map(
-	Object.entries(palette)
-		.map(e => [compressRGB(e[1].values), e[0]])
-);
 
 const HISTORY_SIZE = (Interval.DAY * 7 / Interval.MINUTE);
 
@@ -592,7 +547,7 @@ export default class Template {
 		}
 
 		const { width, height, data } = await decodeTemplateImage(
-			mapPalette(pxls.palette), 
+			pxls.palette, 
 			new URL(template),
 			is.undefined(tw) ? undefined : parseInt(tw)
 		);
@@ -640,13 +595,12 @@ export default class Template {
 			throw new Error("Template image defines no height");
 		}
 
-		const data = await decodeTemplateData(
-			mapPalette(pxls.palette),
+		const data = await indexize(await detemplatize(
 			width,
 			height,
 			await im.raw().toBuffer(),
 			1
-		);
+		), pxls.palette);
 
 		return new Template(
 			pxls,

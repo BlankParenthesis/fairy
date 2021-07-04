@@ -1,6 +1,6 @@
 {
 	"name": "fairy",
-	"version": "1.10.6",
+	"version": "1.11.0",
 	"description": "A pxls.space template tracking bot for Discord",
 	"keywords": [
 		"pxls",
@@ -38,6 +38,8 @@
 		"url": "https://gitlab.com/nbsp_nbsp/fairy"
 	},
 	"dependencies": {
+		"@tensorflow/tfjs": "^3.7.0",
+		"@tensorflow/tfjs-node": "^3.7.0",
 		"@types/check-types": "^7.3.2",
 		"bufferutil": "^4.0.0",
 		"chalk": "^4.0.0",
