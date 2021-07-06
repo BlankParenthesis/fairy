@@ -414,45 +414,8 @@ export default class Template {
 		}
 	}
 
-	private static safelyCropBuffer(
-		buffer: Uint8Array, 
-		bufferWidth: number, 
-		bufferHeight: number, 
-		x: number, 
-		y: number, 
-		width: number, 
-		height: number, 
-		blankFill: number,
-	) {
-		// use only negative offsets (and make them positive)
-		const putOffsetX = Math.max(-x, 0);
-		const putOffsetY = Math.max(-y, 0);
-		
-		// use only positive offsets
-		const takeOffsetX = Math.max(x, 0);
-		const takeOffsetY = Math.max(y, 0);
-
-		const availableWidth = bufferWidth - takeOffsetX;
-		const availableHeight = bufferHeight - takeOffsetY;
-
-		const croppedDataWidth = Math.min(width - putOffsetX, availableWidth);
-		const croppedDataHeight = Math.min(height - putOffsetY, availableHeight);
-
-		const croppedBuffer = new Uint8Array(width * height);
-		croppedBuffer.fill(blankFill);
-
-		for(let y = 0; y < croppedDataHeight; y++) {
-			const takeLocation = (y + takeOffsetY) * bufferWidth + takeOffsetX;
-			const putLocation = (y + putOffsetY) * width + putOffsetX;
-			const row = buffer.subarray(takeLocation, takeLocation + croppedDataWidth);
-			croppedBuffer.set(row, putLocation);
-		}
-
-		return croppedBuffer;
-	}
-
 	get placeableShadow() {
-		return Template.safelyCropBuffer(
+		return Pxls.cropBuffer(
 			this.pxls.placemap, 
 			this.pxls.width,
 			this.pxls.height,
@@ -465,7 +428,7 @@ export default class Template {
 	}
 
 	get shadow() {
-		return Template.safelyCropBuffer(
+		return Pxls.cropBuffer(
 			this.pxls.canvas, 
 			this.pxls.width,
 			this.pxls.height,
@@ -478,19 +441,7 @@ export default class Template {
 	}
 
 	get rgba() {
-		const rgba = new Uint8Array((this.width * this.height) << 2);
-		const { palette } = this.pxls;
-		const { data } = this;
-		const len = data.length << 2;
-
-		for(let i = 0; i < len; i += 4) {
-			if(palette[data[i >> 2]]) {
-				rgba.set(palette[data[i >> 2]].values, i);
-				// set the alpha value
-				rgba[i + 3] = 255;
-			}
-		}
-		return rgba;
+		return Pxls.convertBufferToRGBA(this.data, this.pxls.palette);
 	}
 
 	async save(file: string) {

@@ -1,6 +1,6 @@
 {
 	"name": "fairy",
-	"version": "1.12.1",
+	"version": "1.12.2",
 	"description": "A pxls.space template tracking bot for Discord",
 	"keywords": [
 		"pxls",
@@ -38,7 +38,7 @@
 		"url": "https://gitlab.com/nbsp_nbsp/fairy"
 	},
 	"dependencies": {
-		"@blankparenthesis/pxlsspace": "^2.6.3",
+		"@blankparenthesis/pxlsspace": "^2.7.0",
 		"bufferutil": "^4.0.0",
 		"chalk": "^4.0.0",
 		"check-types": "^11.1.2",
