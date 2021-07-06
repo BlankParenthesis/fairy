@@ -1,0 +1,27 @@
+[package]
+name = "detemplatize"
+version = "0.1.0"
+
+[profile.dev]
+opt-level = 3
+debug = false
+rpath = false
+lto = true
+debug-assertions = false
+codegen-units = 16
+panic = 'unwind'
+incremental = false
+overflow-checks = false
+
+[lib]
+crate-type = ["cdylib"]
+path = "addons/detemplatize.rs"
+
+[dependencies]
+napi = "1"
+napi-derive = "1"
+rayon = "1.5.1"
+num_cpus = "1.13.0"
+
+[build-dependencies]
+napi-build = "1"

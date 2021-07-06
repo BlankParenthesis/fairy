@@ -5,10 +5,6 @@ import sharp = require("sharp");
 import fetch from "node-fetch";
 import is = require("check-types");
 
-// disable tensorflow warnings
-process.env.TF_CPP_MIN_LOG_LEVEL = "2";
-import * as tf from "@tensorflow/tfjs-node";
-
 import { Pxls, TRANSPARENT_PIXEL } from "pxls";
 import Histoire from "./history";
 
@@ -16,43 +12,12 @@ import { Interval, humanTime, zip, hashParams, hasProperty, sleep } from "./util
 
 import config, { FilterType } from "./config";
 
+import { detemplatize } from "../detemplatize";
+
 interface PxlsColor {
 	name: string;
 	values: [number, number, number];
 }
-
-const detemplatize = async (
-	w: number, 
-	h: number, 
-	data: Buffer, 
-	scale: number
-) => {
-	// we shape the tensor into rows of blocks.
-	// each block is shaped as rows of rgba pixels.
-	const tensor = tf.tensor(data, [h, scale, w, scale, 4], "int32");
-
-	// reduce each block to its maximum.
-	// since this includes transparency, well-formed template images (those
-	// with only one color in each block) will logically pick the least 
-	// transparent pixel. That is, of course, presuming that transparent pixels
-	// are black…
-	const detemplatizedData = await tf.max(tensor, [1, 3]).data();
-
-	return new Int32Array(new Uint8Array(detemplatizedData).buffer);
-};
-
-const indexize = async (rgba: Int32Array, palette: PxlsColor[]) => {
-	const packedPalette = palette
-		// add alpha
-		.map(c => [...c.values, 255])
-		// pack the bytes of the palette in the same way as rgba
-		.map(v => new Int32Array(new Uint8Array(v).buffer)[0]);
-
-	return new Uint8Array(rgba.length)
-		// indexOf returns -1 for unknown values.
-		// -1 in a u8 is 255 — the value for a transparent pixel, how convenient!
-		.map((_, i) => packedPalette.indexOf(rgba[i]));
-};
 
 const MEGABYTE = 10 ** 6;
 
@@ -95,15 +60,17 @@ const decodeTemplateImage = async (
 	}
 
 	const width = meta.width / ratio;
-	const height = meta.height / ratio; 
-	const rgba = await detemplatize(
-		width,
-		height, 
-		await im.raw().toBuffer(), 
-		ratio
-	);
+	const height = meta.height / ratio;
 
-	const data = await indexize(rgba, palette);
+	const buffer = await im.raw().toBuffer();
+
+	const data = await detemplatize(
+		buffer, 
+		meta.width,
+		meta.height, 
+		ratio, ratio,
+		palette,
+	);
 
 	return { width, height, data };
 };
@@ -595,12 +562,12 @@ export default class Template {
 			throw new Error("Template image defines no height");
 		}
 
-		const data = await indexize(await detemplatize(
-			width,
-			height,
+		const data = await detemplatize(
 			await im.raw().toBuffer(),
-			1
-		), pxls.palette);
+			width, height,
+			1, 1, 
+			pxls.palette
+		);
 
 		return new Template(
 			pxls,
