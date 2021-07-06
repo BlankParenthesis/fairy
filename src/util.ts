@@ -1,6 +1,6 @@
-const sleep = (t: number) => new Promise(resolve => setTimeout(resolve, t));
+export const sleep = (t: number) => new Promise(resolve => setTimeout(resolve, t));
 
-const humanTime = (t: number) => {
+export const humanTime = (t: number) => {
 	let time = t / 1000; // seconds
 	if(time < 120) {
 		return `${Math.round(time)} second${Math.round(time) === 1 ? "" : "s"}`;
@@ -17,7 +17,7 @@ const humanTime = (t: number) => {
 	return `${Math.round(time)} day${Math.round(time) === 1 ? "" : "s"}`;
 };
 
-const zip = <A, B>(a: ArrayLike<A>, b: ArrayLike<B>) => {
+export const zip = <A, B>(a: ArrayLike<A>, b: ArrayLike<B>) => {
 	const c: [A, B][] = new Array(a.length);
 	for(let i = 0; i < a.length; i++) {
 		c[i] = [a[i], b[i]];
@@ -25,9 +25,9 @@ const zip = <A, B>(a: ArrayLike<A>, b: ArrayLike<B>) => {
 	return c;
 };
 
-const sum = (a: number, b: number) => a + b;
+export const sum = (a: number, b: number) => a + b;
 
-const Interval = (() => {
+export const Interval = (() => {
 	const SECOND = 1000;
 	const MINUTE = 60 * SECOND;
 	const HOUR = 60 * MINUTE;
@@ -40,7 +40,7 @@ const Interval = (() => {
 	};
 })();
 
-const hashParams = (url: string) => {
+export const hashParams = (url: string) => {
 	if(url.indexOf("#") === -1) {
 		throw new Error("need template data");
 	}
@@ -53,33 +53,20 @@ const hashParams = (url: string) => {
 	return new Map(entries);
 };
 
-const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+export const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-const hasProperty = <
+export const hasProperty = <
 	X extends {}, 
 	Y extends PropertyKey
 >(object: X, property: Y): object is X & Record<Y, unknown> => {
 	return Object.prototype.hasOwnProperty.call(object, property);
 };
 
-const hasTypedProperty = <
+export const hasTypedProperty = <
 	X extends {}, 
 	Y extends PropertyKey,
 	T,
 >(object: X, property: Y, guard: (_: unknown) => _ is T): object is X & Record<Y, T> => {
 	return Object.prototype.hasOwnProperty.call(object, property)
 			&& guard(object[property as keyof object]);
-};
-
-// TODO: export directly
-export {
-	sleep,
-	humanTime,
-	zip,
-	sum,
-	Interval,
-	hashParams,
-	escapeRegExp,
-	hasProperty,
-	hasTypedProperty,
 };
