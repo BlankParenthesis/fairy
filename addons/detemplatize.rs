@@ -151,7 +151,6 @@ fn detemplatize(ctx: CallContext) -> Result<JsBuffer> {
 					block_height,
 					&palette,
 				);
-				//println!("{:?}", block_data);
 			}
 		});
 

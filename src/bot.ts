@@ -3,7 +3,7 @@ import * as util from "util";
 
 import { Client, Intents } from "discord.js";
 import * as chalk from "chalk";
-import { Pxls, BufferType } from "pxls";
+import { Pxls, BufferType } from "@blankparenthesis/pxlsspace";
 import is = require("check-types");
 
 import ServerHandler from "./server";

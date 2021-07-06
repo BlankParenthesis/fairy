@@ -5,7 +5,7 @@ import sharp = require("sharp");
 import fetch from "node-fetch";
 import is = require("check-types");
 
-import { Pxls, TRANSPARENT_PIXEL } from "pxls";
+import { Pxls, TRANSPARENT_PIXEL } from "@blankparenthesis/pxlsspace";
 import Histoire from "./history";
 
 import { Interval, humanTime, zip, hashParams, hasProperty, sleep } from "./util";
