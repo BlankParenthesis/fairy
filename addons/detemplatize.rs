@@ -17,24 +17,16 @@ const TRANSPARENT_PIXEL: u8 = 255;
 
 fn reduce_block(
 	block: &Vec<[u8; 4]>, 
-	block_width: usize, 
-	block_height: usize, 
 	palette: &Palette,
 ) -> u8 {
 	let mut votes = vec![0; palette.len()];
 
-	for y in 0..block_height {
-		for x in 0..block_width {
-			let i = y * block_width + x;
+	for [r, g, b, a] in block {
+		if *a > 0 {
+			let color = (*r, *g, *b);
 
-			let alpha = block[i][3];
-
-			if alpha > 0 {
-				let color = (block[i][0], block[i][1], block[i][2]);
-
-				if let Some(index) = palette.get(&color) {
-					votes[*index as usize] += 1;
-				}
+			if let Some(index) = palette.get(&color) {
+				votes[*index as usize] += 1;
 			}
 		}
 	}
@@ -124,7 +116,11 @@ fn detemplatize(ctx: CallContext) -> Result<JsBuffer> {
 
 				let block_origin = block_origin_y_offset + block_origin_x_offset;
 
-				let block_data = (0..block_size).into_iter()
+				// skip the first pixel of an image.
+				// pxlsfiddle likes putting data here, which messes with our decoder.
+				let subblock_start = if block_index == 0 && block_size > 1 { 1 } else { 0 };
+
+				let block_data = (subblock_start..block_size).into_iter()
 					.map(|block_subindex| {
 						let block_x = block_subindex % block_width;
 						let block_y = block_subindex / block_width; // floored implicitly
@@ -147,8 +143,6 @@ fn detemplatize(ctx: CallContext) -> Result<JsBuffer> {
 
 				*block = reduce_block(
 					&block_data, 
-					block_width,
-					block_height,
 					&palette,
 				);
 			}
