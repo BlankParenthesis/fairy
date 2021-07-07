@@ -1,9 +1,3 @@
-#[macro_use]
-extern crate napi_derive;
-extern crate napi;
-extern crate rayon;
-extern crate num_cpus;
-
 use napi::{JsObject, JsTypedArray, JsBuffer, JsNumber, Result, CallContext};
 
 use std::collections::HashMap;
@@ -71,7 +65,7 @@ fn into_palette(palette: JsObject) -> Result<Palette> {
 
 // TODO: make promise
 #[js_function(6)]
-fn detemplatize(ctx: CallContext) -> Result<JsBuffer> {
+pub fn detemplatize(ctx: CallContext) -> Result<JsBuffer> {
 	let buffer_width = ctx.get::<JsNumber>(1)?.get_uint32()? as usize;
 	let _buffer_height = ctx.get::<JsNumber>(2)?.get_uint32()? as usize;
 
@@ -150,10 +144,4 @@ fn detemplatize(ctx: CallContext) -> Result<JsBuffer> {
 
 	ctx.env.create_buffer_with_data(detemplatized_buffer)
 		.map(|buffer| buffer.into_raw())
-}
-
-#[module_exports]
-fn init(mut exports: JsObject) -> Result<()> {
-	exports.create_named_method("detemplatize", detemplatize)?;
-	Ok(())
 }

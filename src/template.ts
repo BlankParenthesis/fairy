@@ -12,7 +12,7 @@ import { Interval, humanTime, zip, hashParams, hasProperty, sleep } from "./util
 
 import config, { FilterType } from "./config";
 
-import { detemplatize } from "../detemplatize";
+import { detemplatize, multiply, add, diff, mask } from "../native";
 
 interface PxlsColor {
 	name: string;
@@ -274,14 +274,26 @@ export default class Template {
 		return this.bounds(x, y) ? this.data[x - this.x + ((y - this.y) * this.width)] : TRANSPARENT_PIXEL;
 	}
 
-	colorAt(x: number, y: number) {
-		return this.pxls.palette[this.at(x, y)].name;
+	indexToPixel(i: number) {
+		if(!(this.data[i] in this.pxls.palette)) {
+			console.debug(i, this.data[i]);
+		}
+
+		return {
+			"x": i % this.width, 
+			"y": Math.floor(i / this.width),
+			"color": this.pxls.palette[this.data[i]].name,
+		};
 	}
 
 	get size() {
 		return this.propertyCache.cache(
 			"size", 
-			() => this.data.filter(b => b !== TRANSPARENT_PIXEL).length,
+			() => diff(
+				// find all non-transparent pixels
+				this.data,
+				add(new Uint8Array(this.data.length), TRANSPARENT_PIXEL),
+			).length,
 		);
 	}
 
@@ -292,14 +304,17 @@ export default class Template {
 	get placeableSize() {
 		return this.propertyCache.cache(
 			"placeableSize", 
-			() => zip(this.data, this.placeableShadow)
-				.reduce(
-					(count, [pixel, placeable]) => 
-						(placeable === 0 && pixel !== TRANSPARENT_PIXEL)
-							? count + 1
-							: count,
-					0
+			() => diff(
+				multiply(
+					// Normalize so transparent is 0, then multiply.
+					// This results in all pixels which are transparent on either buffer being 0.
+					add(this.data, -TRANSPARENT_PIXEL),
+					add(this.placeableShadow, -TRANSPARENT_PIXEL),
 				),
+				// Comparing to an empty buffer returns a list of all non-zero indices.
+				// The length of that list is the number of placeable pixels.
+				new Uint8Array(this.data.length),
+			).length
 		);
 	}
 
@@ -307,28 +322,22 @@ export default class Template {
 		return this.progressCache.cache(
 			"badPixels",
 			() => {
-				const data = zip(this.data, this.shadow);
-				const bads = [];
-				for(let x = 0; x < this.width; x++) {
-					for(let y = 0; y < this.height; y++) {
-						const i = x + (y * this.width);
-						if(data[i][0] !== TRANSPARENT_PIXEL && data[i][0] !== data[i][1]) {
-							bads.push([x + this.x, y + this.y]);
-						}
-					}
-				}
-				return bads;
+				const shifted = add(this.data, -TRANSPARENT_PIXEL);
+				return diff(
+					shifted,
+					mask(
+						// we need everything to be at the same offset for comparison
+						add(this.shadow, -TRANSPARENT_PIXEL),
+						// use transparent pixels from this template to mask shadow
+						shifted,
+					),
+				);
 			}
 		);
 	}
 
 	get rawProgress() {
-		return this.progressCache.cache(
-			"rawProgress",
-			() => zip(this.data, this.shadow)
-				.filter(v => v[1] !== TRANSPARENT_PIXEL && v[0] === v[1])
-				.length,
-		);
+		return this.size - this.badPixels.length;
 	}
 
 	get progress() {
@@ -366,8 +375,9 @@ export default class Template {
 			const ellipsize = badPixels.length > maxExamples ? "\n..." : "";
 			const badPixelsSummary = badPixels.length > 0
 				? `\`\`\`css\n${
-					badPixels.slice(0, maxExamples)
-						.map(p => `[${p.join(",")}] should be ${this.colorAt(p[0], p[1])}`)
+					Array.from(badPixels.slice(0, maxExamples))
+						.map(i => this.indexToPixel(i))
+						.map(p => `[${p.x}, ${p.y}] should be ${p.color}`)
 						.join("\n")
 				}${ellipsize}\`\`\``
 				: "";

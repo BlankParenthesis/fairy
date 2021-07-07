@@ -1,6 +1,6 @@
 {
 	"name": "fairy",
-	"version": "1.12.3",
+	"version": "1.12.4",
 	"description": "A pxls.space template tracking bot for Discord",
 	"keywords": [
 		"pxls",
@@ -31,7 +31,7 @@
 	"scripts": {
 		"start": "node lib/bot.js",
 		"lint": "eslint src/**/* ; exit 0",
-		"build": "tsc ; npm exec napi build --release ; strip detemplatize.node"
+		"build": "tsc ; npx napi build --release ; strip *.node"
 	},
 	"repository": {
 		"type": "git",
@@ -66,6 +66,6 @@
 	},
 	"private": true,
 	"napi": {
-		"name": "detemplatize"
+		"name": "native"
 	}
 }
