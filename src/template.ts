@@ -194,14 +194,6 @@ export default class Template {
 		this.lastCompletion -= 1;
 	}
 
-	private etaFromWindow(window: number, rate: number) {
-		if(rate >= 0) {
-			return ((this.size - this.rawProgress) / rate) * window;
-		} else {
-			return (this.rawProgress / rate) * window;
-		}
-	}
-
 	get complete() {
 		return this.progress === 1;
 	}
