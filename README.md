@@ -3,7 +3,8 @@ Fairy
 Fairy is a [Discord](https://discord.com) bot for template tracking on [pxls.space](https://pxls.space).
 
 The primary function of this bot was as personalized bot for the Pxls faction [The Cirno Embassy](https://perfectfreeze.art), but it works as a generic bot too. 
-This code is run live under a bot with the name *Reimu* (specifically `Reimu#9004` with user ID `510854226876956723`).
+This code is run live under a bot with the name *Reimu*.
+You can [invite Reimu to your Discord server](https://discord.com/api/oauth2/authorize?client_id=510854226876956723&permissions=0&scope=bot%20applications.commands) if you want.
 
 While initially this project included several unrelated functions in one program, it has since become solely about template tracking.
 
