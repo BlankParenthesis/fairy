@@ -234,12 +234,12 @@ fairy.on("interaction", async interaction => {
 					});
 					return;
 				}
-	
-				userLimiters.forEach(l => l.use(userId));
 
 				try {
 					if(server) {
 						await command.execute(interaction, server);
+	
+						serverLimiters.forEach(l => l.use(guildId));
 					} else {
 						throw new Error("Interaction in unknown server");
 					}
