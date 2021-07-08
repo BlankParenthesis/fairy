@@ -10,5 +10,17 @@
 				"cdn.discordapp.com"
 			]
 		}
+	},
+	"interaction": {
+		"limiter": {
+			"user": [
+				{ "interval": "10 minutes", "limit": 50 },
+				{ "interval": "1 day", "limit": 500 } 
+			],
+			"server": [
+				{ "interval": "10 minutes", "limit": 200 },
+				{ "interval": "1 day", "limit": 2000 } 
+			]
+		}
 	}
 }

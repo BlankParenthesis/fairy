@@ -37,6 +37,32 @@ export const Interval = (() => {
 		MINUTE,
 		HOUR,
 		DAY,
+		parse(s: string) {
+			const [valueString, unit] = s.split(/\s+/);
+
+			const value = parseFloat(valueString);
+
+			if(isNaN(value)) {
+				throw new Error("parsed NaN value as interval");
+			}
+
+			switch(unit.toLowerCase()) {
+			case "second":
+			case "seconds":
+				return value * SECOND;
+			case "minute":
+			case "minutes":
+				return value * MINUTE;
+			case "hour":
+			case "hours":
+				return value * HOUR;
+			case "day":
+			case "days":
+				return value * DAY;
+			default:
+				throw new Error("parsed interval with unknown unit");
+			}
+		},
 	};
 })();
 

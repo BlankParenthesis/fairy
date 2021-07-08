@@ -4,7 +4,7 @@ import * as path from "path";
 import is = require("check-types");
 
 import { LogLevel } from "./repl";
-import { hasProperty, hasTypedProperty } from "./util";
+import { hasProperty, hasTypedProperty, Interval } from "./util";
 
 export enum FilterType {
 	DENY = "DENY",
@@ -12,15 +12,52 @@ export enum FilterType {
 }
 
 type Filter = { 
-	"type": FilterType;
-	"domains": string[];
+	type: FilterType;
+	domains: string[];
+}
+
+type Limiter = {
+	interval: number;
+	limit: number;
+}
+
+const parseLimiter = (l: unknown) => {
+	if(!is.object(l)) {
+		throw new Error("limit not an object");
+	}
+
+	if(!hasTypedProperty(l, "limit", is.number)) {
+		throw new Error("limitor has missing or invalid limit");
+	}
+
+	const limit = l.limit;
+
+	let interval;
+
+	if(hasTypedProperty(l, "interval", is.string)) {
+		interval = Interval.parse(l.interval);
+	} else if(hasTypedProperty(l, "interval", is.number)) {
+		interval = l.interval;
+	} else {
+		throw new Error("limitor has missing or invalid interval");
+	}
+
+	return { interval, limit };
+};
+
+type InteractionLimiter = {
+	user: Limiter[];
+	server: Limiter[];
 }
 
 type Config = {
-	"token": string;
-	"loglevel": Set<LogLevel>;
-	"download": {
-		"filter": Filter;
+	token: string;
+	loglevel: Set<LogLevel>;
+	download: {
+		filter: Filter;
+	};
+	interaction: {
+		limiter: InteractionLimiter;
 	};
 }
 
@@ -112,7 +149,43 @@ if(!hasTypedProperty(config, "download", (_): _ is { "filter": Filter } => true)
 	throw new Error("assertion failed: config download filter typetrick");
 }
 
-config.download;
+if(!hasTypedProperty(config, "interaction", is.object)) {
+	throw error("missing interaction section");
+}
+
+if(!hasTypedProperty(config.interaction, "limiter", is.object)) {
+	throw error("missing interaction limiter section");
+}
+
+config.interaction.limiter = ((limiter): InteractionLimiter => {
+	try {
+		if(is.like(limiter, { "user": [], "server": [] })) {
+			return {
+				"user": limiter.user.map(parseLimiter),
+				"server": limiter.server.map(parseLimiter),
+			};
+		} else {
+			throw new Error("interaction limitor section lacks limiter definitions");
+		}
+	} catch(e) {
+		console.warn(`Config interaction limiter format invalid: ${e.message}`);
+		return { 
+			"user": [
+				{ "interval": 10 * Interval.MINUTE, "limit": 50 },
+				{ "interval": Interval.DAY, "limit": 500 },
+			], 
+			"server": [
+				{ "interval": 10 * Interval.MINUTE, "limit": 200 },
+				{ "interval": Interval.DAY, "limit": 2000 },
+			],
+		};
+	}
+})(config.interaction.limiter);
+
+// HACK: see above
+if(!hasTypedProperty(config, "interaction", (_): _ is { "limiter": InteractionLimiter } => true)) {
+	throw new Error("assertion failed: config interaction limiter typetrick");
+}
 
 const validatedConfig: Config = config;
 

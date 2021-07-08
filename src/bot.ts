@@ -184,18 +184,13 @@ class Limiter<T> {
 	}
 }
 
-const MAX_RECENT_INTERACTIONS = 50;
-const MAX_OLD_INTERACTIONS = 500;
+const userLimiters: Limiter<Snowflake>[] = config.interaction.limiter.user.map(l => 
+	new Limiter(l.limit, l.interval)
+);
 
-const userLimiters: Limiter<Snowflake>[] = [
-	new Limiter(MAX_RECENT_INTERACTIONS, Interval.MINUTE * 10),
-	new Limiter(MAX_OLD_INTERACTIONS, Interval.DAY),
-];
-
-const serverLimiters: Limiter<Snowflake>[] = [
-	new Limiter(MAX_RECENT_INTERACTIONS * 4, Interval.MINUTE * 10),
-	new Limiter(MAX_OLD_INTERACTIONS * 4, Interval.DAY),
-];
+const serverLimiters: Limiter<Snowflake>[] = config.interaction.limiter.server.map(l => 
+	new Limiter(l.limit, l.interval)
+);
 
 fairy.on("interaction", async interaction => {
 	if(interaction.isCommand()) {
