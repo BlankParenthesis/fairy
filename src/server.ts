@@ -73,7 +73,7 @@ export default class ServerHandler {
 		this.summaries.push(new Summary(this, message, templates));
 	}
 
-	_forgetSummary(summary: Summary) {
+	private forgetSummary(summary: Summary) {
 		const index = this.summaries.indexOf(summary);
 		if(index === -1) {
 			throw new Error("Cannot drop unknown summary");
@@ -83,7 +83,7 @@ export default class ServerHandler {
 	}
 
 	async dropSummary(summary: Summary) {
-		this._forgetSummary(summary);
+		this.forgetSummary(summary);
 		await summary.finalize();
 	}
 
@@ -98,7 +98,7 @@ export default class ServerHandler {
 					Constants.APIErrors.UNKNOWN_MESSAGE, 
 				].includes(e.code as any)) {
 					console.debug(`Dropping summary whose message seems deleted: ${e.message}`);
-					this._forgetSummary(s);
+					this.forgetSummary(s);
 				} else {
 					console.debug(`Failed to update summary: ${e.message}`);
 				}
@@ -159,7 +159,7 @@ export default class ServerHandler {
 		// that this server handler is loaded before use.
 		if(is.undefined(this.loadjob)) {
 			this.loadjob = (async () => {
-				await this._ensureDirectories();
+				await this.ensureDirectories();
 
 				if(!this.guild.available) {
 					await this.guild.fetch();
@@ -230,7 +230,7 @@ export default class ServerHandler {
 		await fs.writeFile(this.persistentDataPath, JSON.stringify(this.persistent));
 	}
 
-	async _ensureDirectories() {
+	private async ensureDirectories() {
 		await Promise.all([
 			this.templateDir,
 		].map(d => fs.mkdir(d, { "recursive": true })));
