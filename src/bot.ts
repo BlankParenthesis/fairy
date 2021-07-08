@@ -149,6 +149,7 @@ class Limiter<T> {
 		this.interval = interval;
 
 		setTimeout(() => {
+			this.refresh();
 			setInterval(
 				() => this.refresh(), 
 				this.interval
@@ -179,7 +180,7 @@ class Limiter<T> {
 	}
 
 	get timeUntilRefresh() {
-		return this.limit - Date.now() % this.limit;
+		return this.interval - Date.now() % this.interval;
 	}
 }
 
