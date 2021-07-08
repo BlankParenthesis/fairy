@@ -8,7 +8,7 @@ import is = require("check-types");
 import { Pxls, TRANSPARENT_PIXEL } from "@blankparenthesis/pxlsspace";
 import Histoire from "./history";
 
-import { Interval, humanTime, zip, hashParams, hasProperty, sleep } from "./util";
+import { Interval, humanTime, hasTypedProperty, hashParams, hasProperty } from "./util";
 
 import config, { FilterType } from "./config";
 
@@ -103,6 +103,8 @@ export default class Template {
 	readonly y: number;
 	readonly width: number;
 	readonly height: number;
+	readonly name: string;
+	readonly source?: URL;
 	
 	readonly started: number;
 	private data: Uint8Array;
@@ -121,19 +123,23 @@ export default class Template {
 
 	constructor(
 		pxls: Pxls, 
+		name: string,
 		x: number, 
 		y: number, 
 		width: number, 
 		height: number, 
+		source: URL | undefined,
 		data: Uint8Array, 
 		started: number, 
 		historicalData: unknown = {}
 	) {
 		this.pxls = pxls;
+		this.name = name;
 		this.x = isNaN(x) ? 0 : x;
 		this.y = isNaN(y) ? 0 : y;
 		this.width = width;
 		this.height = height;
+		this.source = source;
 		this.started = started || Date.now();
 		this.data = data;
 
@@ -336,6 +342,28 @@ export default class Template {
 		return this.rawProgress / this.size;
 	}
 
+	get link() {
+		if(is.undefined(this.source)) {
+			throw new Error("tried to generate a link for a template without a known source");
+		}
+
+		return new URL(`https://pxls.space#${
+			Object.entries({
+				"x": this.x + this.width / 2,
+				"y": this.y + this.height / 2,
+				"scale": 4,
+				"tw": this.width,
+				"template": this.source,
+				"ox": this.x,
+				"oy": this.y,
+				"title": this.name,
+				"oo": 1,
+			}).map(e => e.map(c => encodeURIComponent(c.toString())))
+				.map(e => e.join("="))
+				.join("&")
+		}`);
+	}
+
 	get summary() {
 		const { size } = this;
 
@@ -343,19 +371,21 @@ export default class Template {
 			return "⚠ *Template is empty*";
 		}
 
-		const unplaceablePixels = size - this.placeableSize;
+		const link = !is.undefined(this.source) ? `[template link](${this.link})\n` : "";
+		const formattedProgress = parseFloat((this.progress * 100).toFixed(2));
 
+		const unplaceablePixels = size - this.placeableSize;
 		const unplaceablePixelsNotice = unplaceablePixels > 0
 			? `\n⚠ *${unplaceablePixels} pixels out of bounds*`
 			: "";
 
-		const formattedProgress = parseFloat((this.progress * 100).toFixed(2));
-		const overview = `${formattedProgress}% done\n`
+		const overview = `${link}`
+			+ `${formattedProgress}% done\n`
 			+ `${this.rawProgress} of ${size} pixels`
 			+ `${unplaceablePixelsNotice}`;
 
 		if(this.complete) {
-			return overview;
+			return `${overview}`;
 		} else {
 			const { badPixels, eta } = this;
 			const now = Date.now();
@@ -461,14 +491,21 @@ export default class Template {
 
 		const template = params.get("template");
 		const tw = params.get("tw");
+		const name = params.get("title");
 
 		if(is.undefined(template)) {
 			throw new Error("Missing template source");
 		}
 
+		if(is.undefined(name)) {
+			throw new Error("Missing template name");
+		}
+
+		const source = new URL(template);
+
 		const { width, height, data } = await decodeTemplateImage(
 			pxls.palette, 
-			new URL(template),
+			source,
 			is.undefined(tw) ? undefined : parseInt(tw)
 		);
 
@@ -476,11 +513,13 @@ export default class Template {
 		const oy = params.get("oy");
 
 		return new Template(
-			pxls, 
+			pxls,
+			name,
 			is.undefined(ox) ? 0 : parseInt(ox),
 			is.undefined(oy) ? 0 : parseInt(oy),
 			width, 
 			height, 
+			source,
 			data, 
 			Date.now()
 		);
@@ -490,17 +529,23 @@ export default class Template {
 		if(!is.object(persistentData)) {
 			throw new Error("Invalid template data");
 		}
-		if(!hasProperty(persistentData, "x") || !is.number(persistentData.x)) {
+		if(!hasTypedProperty(persistentData, "x", is.number)) {
 			throw new Error("Invalid template x position");
 		}
-		if(!hasProperty(persistentData, "y") || !is.number(persistentData.y)) {
+		if(!hasTypedProperty(persistentData, "y", is.number)) {
 			throw new Error("Invalid template y position");
 		}
-		if(!hasProperty(persistentData, "started") || !is.number(persistentData.started)) {
+		if(!hasTypedProperty(persistentData, "started", is.number)) {
 			throw new Error("Invalid template start time");
 		}
 		if(!hasProperty(persistentData, "history")) {
 			throw new Error("Invalid template history");
+		}
+
+		let source;
+
+		if(hasTypedProperty(persistentData, "source", is.string)) {
+			source = new URL(persistentData.source);
 		}
 
 		const imagePath = path.resolve(directory, `${name}.png`);
@@ -524,10 +569,12 @@ export default class Template {
 
 		return new Template(
 			pxls,
+			name,
 			persistentData.x,
 			persistentData.y,
 			width,
 			height,
+			source,
 			data,
 			persistentData.started,
 			persistentData.history
@@ -535,7 +582,7 @@ export default class Template {
 	}
 
 	get persistent() {
-		const { x, y, started } = this;
+		const { x, y, started, source } = this;
 		const history = {
 			"good": Array.from(this.histy.copyData()),
 			"bad": Array.from(this.croire.copyData()),
@@ -548,6 +595,7 @@ export default class Template {
 			y,
 			started,
 			history,
+			source,
 		};
 	}
 }
