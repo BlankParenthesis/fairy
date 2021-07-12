@@ -399,7 +399,7 @@ export default class Template {
 				? `\`\`\`css\n${
 					Array.from(badPixels.slice(0, maxExamples))
 						.map(i => this.indexToPixel(i))
-						.map(p => `[${p.x}, ${p.y}] should be ${p.color}`)
+						.map(p => `[${this.x + p.x}, ${this.y + p.y}] should be ${p.color}`)
 						.join("\n")
 				}${ellipsize}\`\`\``
 				: "";
