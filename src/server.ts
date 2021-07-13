@@ -13,9 +13,9 @@ import { hashParams, escapeRegExp, hasProperty, sum } from "./util";
 // TODO: config option for space limit and summary limit
 // 25 MB of memory space in major buffers
 const SPACE_LIMIT = 25 * 10 ** 6;
-// 100 seems like a reasonably amount that might actually get used.
+// 100 seems like a reasonable amount that might actually get used.
 // if it ends up being too stressful, look at optimizing template summary generation first.
-export const SUMMARY_LIMIT = 5;
+export const SUMMARY_LIMIT = 100;
 
 export default class ServerHandler {
 	private pxls: Pxls;
