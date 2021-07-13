@@ -12,7 +12,8 @@ mod buffermath;
 
 #[module_exports]
 fn init(mut exports: JsObject) -> Result<()> {
-	exports.create_named_method("detemplatize", detemplatize::detemplatize)?;
+	exports.create_named_method("unstylize", detemplatize::unstylize)?;
+	exports.create_named_method("index", detemplatize::index)?;
 	exports.create_named_method("diff", buffermath::indexed_diff)?;
 	exports.create_named_method("add", buffermath::add)?;
 	exports.create_named_method("multiply", buffermath::multiply)?;

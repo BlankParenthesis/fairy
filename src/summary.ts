@@ -29,8 +29,9 @@ export default class Summary {
 		// TODO: ensure list stays within Discord's embed count limit
 		templates.map(t => serverHandler.findTemplate(t))
 			.filter((t): t is Exclude<typeof t, null> => t !== null)
-			.forEach(({ name, template }) => {
-				embedObject.addField(name, template.summary, true);
+			.map(({ template }) => template)
+			.forEach(tracked => {
+				embedObject.addField(tracked.name, tracked.summary, true);
 			});
 
 		return embedObject;
@@ -128,7 +129,7 @@ export default class Summary {
 		return new Summary(serverHandler, message, templates.filter(s => is.string(s)));
 	}
 
-	get persistent() {
+	toJSON() {
 		return {
 			"channel": this.message.channel.id,
 			"message": this.message.id,

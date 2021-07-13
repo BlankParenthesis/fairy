@@ -1,3 +1,8 @@
+import * as is from "check-types";
+import { SavedTemplate } from "./template";
+
+// TODO: use declaration style functions — they're more readable imo
+
 export const sleep = (t: number) => new Promise(resolve => setTimeout(resolve, t));
 
 export const humanTime = (t: number) => {
@@ -26,6 +31,8 @@ export const zip = <A, B>(a: ArrayLike<A>, b: ArrayLike<B>) => {
 };
 
 export const sum = (a: number, b: number) => a + b;
+
+// TODO: create time module or use new ECMA time stuff
 
 export const Interval = (() => {
 	const SECOND = 1000;
@@ -76,7 +83,7 @@ export const hashParams = (url: string) => {
 		.map(e => e.split("="))
 		.map(e => [e[0], decodeURIComponent(e[1])]);
 
-	return new Map(entries);
+	return Object.fromEntries(entries);
 };
 
 export const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -95,4 +102,19 @@ export const hasTypedProperty = <
 >(object: X, property: Y, guard: (_: unknown) => _ is T): object is X & Record<Y, T> => {
 	return Object.prototype.hasOwnProperty.call(object, property)
 			&& guard(object[property as keyof object]);
+};
+
+export const parseIntOrDefault = <T>(string: string | undefined, defaultValue: T) => {
+	let parsed;
+	if(is.undefined(string) || isNaN(parsed = parseInt(string))) {
+		return defaultValue;
+	} else {
+		return parsed;
+	}
+};
+
+export type SaveableAs<To> = {
+	[K in keyof To]: To[K] | {
+		"toJSON": () => To[K] | SaveableAs<To[K]>;
+	};
 };

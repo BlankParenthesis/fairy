@@ -1,207 +1,424 @@
-import * as path from "path";
 import { URL } from "url";
+import * as crypto from "crypto";
 
 import sharp = require("sharp");
-import fetch from "node-fetch";
 import is = require("check-types");
 
-import { Pxls, TRANSPARENT_PIXEL } from "@blankparenthesis/pxlsspace";
+import { Pxls, TRANSPARENT_PIXEL, PxlsColor, Pixel } from "@blankparenthesis/pxlsspace";
+
 import Histoire from "./history";
+import { Interval, humanTime, SaveableAs } from "./util";
+import Cache from "./cache";
+import { downloadImage } from "./download";
 
-import { Interval, humanTime, hasTypedProperty, hashParams, hasProperty } from "./util";
+import { multiply, add, diff, mask, index, unstylize } from "../native";
 
-import config, { FilterType } from "./config";
-
-import { detemplatize, multiply, add, diff, mask } from "../native";
-
-interface PxlsColor {
-	name: string;
-	values: [number, number, number];
+enum IndexMethod {
+	EXACT,
 }
 
-const MEGABYTE = 10 ** 6;
+class IndexedArray extends Uint8Array {
+	deindex(palette: PxlsColor[]) {
+		return Pxls.convertBufferToRGBA(this, palette);
+	}
 
-const decodeTemplateImage = async (
-	palette: PxlsColor[], 
-	url: URL, 
-	tw: number | undefined
-) => {
-	const urlIsKnown = config.download.filter.domains.includes(url.hostname);
-	const wantKnownURL = config.download.filter.type === FilterType.ALLOW;
+	static index(
+		rgba: Uint8Array, 
+		palette: PxlsColor[], 
+		method: IndexMethod | ((pixel: Uint8Array) => number) = IndexMethod.EXACT
+	) {
+		if(is.function(method)) {
+			const buffer = new IndexedArray(rgba.length / 4);
 
-	if(urlIsKnown !== wantKnownURL) {
-		let message = `Untrusted template source “${url.hostname}”`;
+			for(let i = 0; i < buffer.length; i++) {
+				const start = i * 4;
+				buffer[i] = method(rgba.subarray(start, start + 4));
+			}
 
-		if(config.download.filter.type === FilterType.ALLOW) {
-			message += ` (trusted domains: ${config.download.filter.domains.join(", ")})`;
+			return buffer;
+		} else {
+			switch(method) {
+			case IndexMethod.EXACT:
+				return new IndexedArray(index(rgba, palette));
+			default:
+				throw new Error(`Unimplemented indexing method ${method}`);
+			}
 		}
 
-		throw new Error(message);
-	}
-
-	const template = await fetch(url, {
-		// full global template, custom symbols: ~~6.7 MB~~ about 10MB (6.7 was webp)
-		"size": 16 * MEGABYTE,
-	});
-
-	const im = sharp(await template.buffer());
-	const meta = await im.metadata();
-
-	if(is.undefined(meta.width)) {
-		throw new Error("Template i mage defines no width");
-	}
-	if(is.undefined(meta.height)) {
-		throw new Error("Template image defines no height");
-	}
-
-	const ratio = (!is.undefined(tw) && tw > 0) ? meta.width / tw : 1;
-	if(ratio !== Math.round(ratio)) {
-		throw new Error("Refusing to process template with non-integer scale");
-	}
-
-	const width = meta.width / ratio;
-	const height = meta.height / ratio;
-
-	const buffer = await im.raw().toBuffer();
-
-	const data = await detemplatize(
-		buffer, 
-		meta.width,
-		meta.height, 
-		ratio, ratio,
-		palette,
-	);
-
-	return { width, height, data };
-};
-
-const HISTORY_SIZE = (Interval.DAY * 7 / Interval.MINUTE);
-
-class Cache {
-	private store = new Map<string, any>();
-
-	cache<T>(key: string, compute: () => T): T {
-		let value = this.store.get(key) as T;
-
-		if(is.undefined(value)) {
-			value = compute();
-			this.store.set(key, value);
-		}
-
-		return value;
-	}
-	
-	invalidate() {
-		this.store.clear();
 	}
 }
 
-export default class Template {
-	private pxls: Pxls;
+export class TemplateDesign {
+	readonly size: number;
 
-	readonly x: number;
-	readonly y: number;
-	readonly width: number;
-	readonly height: number;
-	readonly name: string;
-	readonly source?: URL;
+	constructor(
+		public readonly width: number,
+		public readonly height: number,
+		public readonly data: IndexedArray,
+	) {
+		if(width * height !== data.length) {
+			throw new Error("Template dimensions do not match data length");
+		}
+
+		// Size is all non-transparent pixels.
+		// In other words: the number of differences between the data and
+		// a buffer of only transparent pixels.
+		this.size = diff(
+			this.data,
+			new Uint8Array(this.data.length).fill(TRANSPARENT_PIXEL),
+		).length;
+	}
+
+	read(iOrX: number, y?: number) {
+		let i = iOrX;
+
+		if(!is.undefined(y)) {
+			i = y * this.width + iOrX;
+		}
+
+		return {
+			"x": i % this.width, 
+			"y": Math.floor(i / this.width),
+			"color": this.data[i],
+		};
+	}
+
+	get hash() {
+		return crypto.createHash("sha256")
+			.update(this.data)
+			.digest("hex");
+	}
+
+	async save(file: string, palette: PxlsColor[]) {
+		await sharp(Buffer.from(this.data.deindex(palette)), { "raw": {
+			"width": this.width,
+			"height": this.height,
+			"channels": 4,
+		} }).toFile(file);
+	}
 	
-	readonly started: number;
-	private data: Uint8Array;
+	static async load(file: string, palette: PxlsColor[]) {
+		const image = sharp(file).raw();
 
+		const { width, height } = await image.metadata();
+
+		if(is.undefined(width)) {
+			throw new Error("Image defines no width");
+		}
+		if(is.undefined(height)) {
+			throw new Error("Image defines no height");
+		}
+
+		const buffer = IndexedArray.index(
+			await image.toBuffer(),
+			palette,
+		);
+
+		return new TemplateDesign(width, height, buffer);
+	}
+
+	// TODO: stylize()
+}
+
+export class StylizedTemplateDesign {
+	constructor(
+		public readonly designWidth: number,
+		public readonly designHeight: number,
+		public readonly styleWidth: number,
+		public readonly styleHeight: number,
+		private readonly data: IndexedArray,
+	) {
+		if(styleWidth !== Math.round(styleWidth)) {
+			throw new Error("Invalid style width for deisgn");
+		}
+
+		if(styleHeight !== Math.round(styleHeight)) {
+			throw new Error("Invalid style height for design");
+		}
+
+		const expectedLength = designWidth * designHeight * styleWidth * styleHeight;
+		if(expectedLength !== data.length) {
+			throw new Error("Template dimensions do not match data length");
+		}
+	}
+
+	unstylize(): TemplateDesign {
+		let data;
+		if(this.styleWidth === 1 && this.styleHeight === 1) {
+			data = this.data;
+		} else {
+			data = new IndexedArray(unstylize(
+				this.data,
+				this.designWidth * this.styleWidth,
+				this.designHeight * this.styleHeight,
+				this.styleWidth,
+				this.styleHeight,
+			));
+		}
+
+		return new TemplateDesign(
+			this.designWidth,
+			this.designHeight,
+			data,
+		);
+	}
+
+	static async download(source: URL, width: number | undefined, palette: PxlsColor[]) {
+		const image = await downloadImage(source);
+
+		const designWidth = is.undefined(width) ? image.width : width;
+		const designHeight = designWidth / image.width * image.height;
+
+		const styleWidth = image.width / designWidth;
+		const styleHeight = image.height / designHeight;
+
+		return new StylizedTemplateDesign(
+			designWidth,
+			designHeight,
+			styleWidth,
+			styleHeight,
+			IndexedArray.index(image.data, palette),
+		);
+	}
+}
+
+export class Template {
+	constructor(
+		readonly design: TemplateDesign,
+		readonly x: number,
+		readonly y: number,
+		readonly title?: string,
+		readonly source?: URL,
+	) {}
+
+	get width() {
+		return this.design.width;
+	}
+
+	get height() {
+		return this.design.height;
+	}
+
+	get size() {
+		return this.design.size;
+	}
+
+	get link() {
+		if(is.undefined(this.source)) {
+			throw new Error("tried to generate a link for a template without a source");
+		}
+
+		return new URL(`https://pxls.space#${
+			Object.entries({
+				"x": this.x + this.width / 2,
+				"y": this.y + this.height / 2,
+				"scale": 4,
+				"template": this.source,
+				"ox": this.x,
+				"oy": this.y,
+				"tw": this.width,
+				"title": this.title,
+				"oo": 1,
+			}).filter((e): e is [string, Exclude<typeof e[1], undefined>] => !is.undefined(e[1]))
+				.map(e => e.map(c => encodeURIComponent(c.toString())))
+				.map(e => e.join("="))
+				.join("&")
+		}`);
+	}
+
+	get data() {
+		return this.design.data;
+	}
+
+	redesigned(design: TemplateDesign) {
+		return new Template(design, this.x, this.y, this.title, this.source);
+	}
+	
+	repositioned(x: number, y: number) {
+		return new Template(this.design, x, y, this.title, this.source);
+	}
+	
+	retitled(title?: string) {
+		return new Template(this.design, this.x, this.y, title, this.source);
+	}
+	
+	resourced(source?: URL) {
+		return new Template(this.design, this.x, this.y, this.title, source);
+	}
+}
+
+const HISTORY_RANGE = Interval.DAY * 7;
+const HISTORY_SIZE = HISTORY_RANGE / Interval.MINUTE;
+
+interface Activity {
+	positive: number[];
+	neutral: number[];
+	negative: number[];
+	timestamp: number;
+}
+
+export class TemplateActivity {
 	// https://neptunia.fandom.com/wiki/Histoire
 	// > Histoire (イストワール, Isutowāru) is the personified form of the tome 
 	// > that contains the history of Gamindustri. She was created for the 
 	// > task of documenting the world's history within her pages.
-	private histy = new Histoire();
-	private croire = new Histoire();
+	private histy = new Histoire(HISTORY_RANGE);
+	// can't think of a good Neptunia analogue here…
+	private neutral = new Histoire(HISTORY_RANGE);
+	private croire = new Histoire(HISTORY_RANGE);
 
-	private lastCompletion: number;
+	private timestamp: number;
 
-	private progressCache = new Cache();
-	private propertyCache = new Cache();
+	constructor(activity: Partial<Activity>) {
+		this.timestamp = activity.timestamp || Date.now();
 
-	constructor(
-		pxls: Pxls, 
-		name: string,
-		x: number, 
-		y: number, 
-		width: number, 
-		height: number, 
-		source: URL | undefined,
-		data: Uint8Array, 
-		started: number, 
-		historicalData: unknown = {}
-	) {
-		this.pxls = pxls;
-		this.name = name;
-		this.x = isNaN(x) ? 0 : x;
-		this.y = isNaN(y) ? 0 : y;
-		this.width = width;
-		this.height = height;
-		this.source = source;
-		this.started = started || Date.now();
-		this.data = data;
-
-		const now = Date.now();
-
-		if(is.object(historicalData)) {
-			if(hasProperty(historicalData, "progress") && is.number(historicalData.progress)) {
-				this.lastCompletion = historicalData.progress;
-			} else {
-				this.lastCompletion = this.rawProgress;
-			}
-
-			if(hasProperty(historicalData, "good") && Array.isArray(historicalData.good)) {
-				const data = new Uint16Array(historicalData.good);
-
-				if(hasProperty(historicalData, "timestamp") && is.number(historicalData.timestamp)) {
-					this.histy.backfill(data, historicalData.timestamp);
-				} else {
-					this.histy.backfill(data, now);
-				}
-			}
-
-			if(hasProperty(historicalData, "bad") && Array.isArray(historicalData.bad)) {
-				const data = new Uint16Array(historicalData.bad);
-
-				if(hasProperty(historicalData, "timestamp") && is.number(historicalData.timestamp)) {
-					this.croire.backfill(data, historicalData.timestamp);
-				} else {
-					this.croire.backfill(data, now);
-				}
-			}
-		} else {
-			this.lastCompletion = this.rawProgress;
+		if(!is.undefined(activity.positive)) {
+			this.histy.backfill(new Uint16Array(activity.positive), this.timestamp);
 		}
 
-		this.sync(now);
+		if(!is.undefined(activity.neutral)) {
+			this.neutral.backfill(new Uint16Array(activity.neutral), this.timestamp);
+		}
+
+		if(!is.undefined(activity.negative)) {
+			this.croire.backfill(new Uint16Array(activity.negative), this.timestamp);
+		}
 	}
 
-	sync(time = Date.now()) {
-		this.progressCache.invalidate();
-		const progress = this.rawProgress;
-		const goodValueDelta = Math.max(progress - this.lastCompletion, 0);
-		const badValueDelta = Math.max(this.lastCompletion - progress, 0);
-		this.histy.hit(goodValueDelta, time);
-		this.croire.hit(badValueDelta, time);
-		this.lastCompletion = progress;
+	update(positive: number, neutral: number, negative: number, time = Date.now()) {
+		this.histy.hit(positive, time);
+		this.neutral.hit(neutral, time);
+		this.croire.hit(negative, time);
+
+		this.timestamp = time;
 	}
 
-	goodPixel() {
-		this.progressCache.invalidate();
-		this.histy.hit(1);
-		this.lastCompletion += 1;
+	recent(period: number) {
+		return {
+			"positive": this.histy.recentHits(period),
+			"neutral": this.neutral.recentHits(period),
+			"negative": this.croire.recentHits(period),
+		};
 	}
 
-	badPixel() {
+	toJSON(): SaveableAs<Required<Activity>> {
+		return {
+			"positive": this.histy,
+			"neutral": this.neutral,
+			"negative": this.croire,
+			"timestamp": this.timestamp,
+		};
+	}
+}
+
+const TRACKED_INTERVALS = [
+	Interval.MINUTE,
+	Interval.MINUTE * 15,
+	Interval.HOUR,
+	Interval.HOUR * 4,
+	Interval.HOUR * 12,
+	Interval.DAY,
+	Interval.DAY * 2,
+	Interval.DAY * 4,
+	Interval.DAY * 7,
+];
+
+type PixelSync = Map<number, Pixel & { oldColor: number }>;
+
+export class TrackableTemplate extends Template {
+	private readonly history: TemplateActivity;
+
+	private lastProgress: number;
+	readonly placeableSize: number;
+	private placeableShadow: Uint8Array;
+	private progressCache = new Cache();
+
+	constructor(
+		private pxls: Pxls,
+		design: TemplateDesign,
+		x: number,
+		y: number,
+		readonly started: number,
+		activity?: Partial<Activity>,
+		lastProgress?: number,
+	) {
+		super(design, x, y);
+
+		const { progress } = this;
+		this.history = new TemplateActivity(activity || {});
+		if(is.undefined(lastProgress)) {
+			this.lastProgress = progress;
+		} else {
+			this.lastProgress = lastProgress;
+			this.sync();
+		}
+
+		this.placeableShadow = this.pxls.cropPlacemap(
+			this.x,
+			this.y,
+			this.width,
+			this.height,
+		);
+		
+		this.placeableSize = diff(
+			multiply(
+				// Normalize so transparent is 0, then multiply.
+				// This results in all pixels which are transparent on either buffer being 0.
+				add(this.data, -TRANSPARENT_PIXEL),
+				add(this.placeableShadow, -TRANSPARENT_PIXEL),
+			),
+			// Comparing to an empty buffer returns a list of all non-zero indices.
+			// The length of that list is the number of placeable pixels.
+			new Uint8Array(this.data.length),
+		).length;
+	}
+
+	sync(changes?: PixelSync) {
 		this.progressCache.invalidate();
-		this.croire.hit(1);
-		this.lastCompletion -= 1;
+
+		if(is.undefined(changes)) {
+			const { progress } = this;
+
+			const positive = Math.max(progress - this.lastProgress, 0);
+			const neutral = Math.abs(progress - this.lastProgress);
+			const negative = Math.max(this.lastProgress - progress, 0);
+
+			this.history.update(positive, negative, neutral);
+
+			this.lastProgress = progress;
+		} else {
+			const { positive, neutral, negative } = Array.from(changes.entries())
+				.reduce((counts, [i, change]) => {
+					const wasCorrect = this.design.data[i] === change.oldColor;
+					const becameCorrect = this.design.data[i] === change.color;
+
+					if(wasCorrect) {
+						counts.negative += 1;
+					} else if(becameCorrect) {
+						counts.positive += 1;
+					} else {
+						counts.neutral += 1;
+					}
+
+					return counts;
+				}, { "positive": 0, "neutral": 0, "negative": 0 });
+			
+			this.history.update(positive, negative, neutral);
+
+			this.lastProgress += positive - negative;
+		}
+	}
+
+	recentActivity(interval: number) {
+		return this.history.recent(interval);
 	}
 
 	get complete() {
-		return this.progress === 1;
+		return this.progress === this.size;
+	}
+
+	get progress() {
+		return this.size - this.differences.length;
 	}
 
 	get eta() {
@@ -210,31 +427,17 @@ export default class Template {
 		}
 
 		const trackTime = Date.now() - this.started;
-		const intervals = [
-			Interval.MINUTE,
-			Interval.MINUTE * 15,
-			Interval.HOUR,
-			Interval.HOUR * 4,
-			Interval.HOUR * 12,
-			Interval.DAY,
-			Interval.DAY * 2,
-			Interval.DAY * 4,
-			Interval.DAY * 7,
-		].filter(interval => interval < trackTime);
+		const intervals = TRACKED_INTERVALS.filter(interval => interval < trackTime);
+		intervals.push(trackTime);
 
-		if(intervals.length === 0) {
-			return Infinity;
-		}
-
-		const { rawProgress } = this;
-		const remainingProgress = this.size - rawProgress;
+		const { size, progress } = this;
+		const remainingProgress = size - progress;
 
 		return intervals.map(interval => {
-			const goodPixels = this.histy.recentHits(interval);
-			const badPixels = this.croire.recentHits(interval);
-			const progress = goodPixels - badPixels;
+			const activity = this.history.recent(interval);
+			const change = activity.positive - activity.negative;
 
-			const rate = progress / interval;
+			const rate = change / interval;
 
 			let estimate;
 			if(rate >= 0) {
@@ -242,7 +445,7 @@ export default class Template {
 			} else {
 				// this estimate is always negative
 				// and can be distinguished from the regular one.
-				estimate = rawProgress / rate;
+				estimate = progress / rate;
 			}
 
 			// this ratio is used to determine which estimate is closest to its interval.
@@ -264,61 +467,18 @@ export default class Template {
 		}).reduce((a, b) => a.ratio < b.ratio ? a : b).estimate;
 	}
 
-	bounds(x: number, y: number) {
-		return !(x < this.x || y < this.y || x >= this.x + this.width || y >= this.y + this.height);
-	}
-
-	at(x: number, y: number) {
-		return this.bounds(x, y) ? this.data[x - this.x + ((y - this.y) * this.width)] : TRANSPARENT_PIXEL;
-	}
-
-	indexToPixel(i: number) {
-		if(!(this.data[i] in this.pxls.palette)) {
-			console.debug(i, this.data[i]);
-		}
-
-		return {
-			"x": i % this.width, 
-			"y": Math.floor(i / this.width),
-			"color": this.pxls.palette[this.data[i]].name,
-		};
-	}
-
-	get size() {
-		return this.propertyCache.cache(
-			"size", 
-			() => diff(
-				// find all non-transparent pixels
-				this.data,
-				add(new Uint8Array(this.data.length), TRANSPARENT_PIXEL),
-			).length,
+	get shadow() {
+		return this.pxls.cropCanvas(
+			this.x,
+			this.y,
+			this.width,
+			this.height,
 		);
 	}
 
-	get space() {
-		return this.width * this.height + 2 * HISTORY_SIZE;
-	}
-
-	get placeableSize() {
-		return this.propertyCache.cache(
-			"placeableSize", 
-			() => diff(
-				multiply(
-					// Normalize so transparent is 0, then multiply.
-					// This results in all pixels which are transparent on either buffer being 0.
-					add(this.data, -TRANSPARENT_PIXEL),
-					add(this.placeableShadow, -TRANSPARENT_PIXEL),
-				),
-				// Comparing to an empty buffer returns a list of all non-zero indices.
-				// The length of that list is the number of placeable pixels.
-				new Uint8Array(this.data.length),
-			).length
-		);
-	}
-
-	get badPixels() {
+	get differences() {
 		return this.progressCache.cache(
-			"badPixels",
+			"differences",
 			() => {
 				const shifted = add(this.data, -TRANSPARENT_PIXEL);
 				return diff(
@@ -334,72 +494,104 @@ export default class Template {
 		);
 	}
 
-	get rawProgress() {
-		return this.size - this.badPixels.length;
+	sample(localX: number, localY: number) {
+		const x = this.x + localX;
+		const y = this.y + localY;
+
+		const transparent: PxlsColor = {
+			"values": [0, 0, 0],
+			"name": "transparent",
+		};
+
+		const canvasIndex = this.pxls.canvas[x * this.pxls.width + y];
+		const canvasColor = canvasIndex === TRANSPARENT_PIXEL
+			? transparent
+			: this.pxls.palette[canvasIndex];
+		const designIndex = this.design.data[localX * this.design.width + localY];
+		const designColor = designIndex === TRANSPARENT_PIXEL
+			? transparent
+			: this.pxls.palette[designIndex];
+
+		return { x, y, canvasColor, designColor };
 	}
 
-	get progress() {
-		return this.rawProgress / this.size;
+	/**
+	 * An approximation of the memory used by this template
+	 */
+	get space() {
+		return this.width * this.height + 3 * HISTORY_SIZE * 2;
+	}
+
+	toJSON(): SaveableAs<Required<SavedTemplate>> {
+		const { x, y, width, height, history, lastProgress, started } = this;
+
+		return {
+			x, 
+			y, 
+			width, 
+			height, 
+			started,
+			history,
+			"progress": lastProgress,
+		};
+	}
+}
+
+export class TrackedTemplate {
+	constructor(
+		readonly template: TrackableTemplate,
+		readonly name: string,
+		readonly source?: URL,
+	) {
+		
 	}
 
 	get link() {
-		if(is.undefined(this.source)) {
-			throw new Error("tried to generate a link for a template without a known source");
-		}
-
-		return new URL(`https://pxls.space#${
-			Object.entries({
-				"x": this.x + this.width / 2,
-				"y": this.y + this.height / 2,
-				"scale": 4,
-				"tw": this.width,
-				"template": this.source,
-				"ox": this.x,
-				"oy": this.y,
-				"title": this.name,
-				"oo": 1,
-			}).map(e => e.map(c => encodeURIComponent(c.toString())))
-				.map(e => e.join("="))
-				.join("&")
-		}`);
+		return this.template
+			.retitled(this.name)
+			.resourced(this.source)
+			.link;
 	}
 
 	get summary() {
-		const { size } = this;
+		const { size } = this.template;
 
 		if(size === 0) {
 			return "⚠ *Template is empty*";
 		}
 
-		const link = !is.undefined(this.source) ? `[template link](${this.link})\n` : "";
-		const formattedProgress = parseFloat((this.progress * 100).toFixed(2));
+		const { progress } = this.template;
 
-		const unplaceablePixels = size - this.placeableSize;
+		const link = !is.undefined(this.source) ? `[template link](${this.link})\n` : "";
+		const formattedProgress = parseFloat((progress / size * 100).toFixed(2));
+
+		const unplaceablePixels = size - this.template.placeableSize;
 		const unplaceablePixelsNotice = unplaceablePixels > 0
 			? `\n⚠ *${unplaceablePixels} pixels out of bounds*`
 			: "";
 
 		const overview = `${link}`
 			+ `${formattedProgress}% done\n`
-			+ `${this.rawProgress} of ${size} pixels`
+			+ `${progress} of ${size} pixels`
 			+ `${unplaceablePixelsNotice}`;
 
-		if(this.complete) {
+		if(this.template.complete) {
 			return `${overview}`;
 		} else {
-			const { badPixels, eta } = this;
+			const { differences, eta } = this.template;
 			const now = Date.now();
 
 			// rate in px/unit time (px/ms).
 			// 4 px/min is considered fast
 			const fast = 4 / Interval.MINUTE;
 			const maxExamples = 4;
-			const ellipsize = badPixels.length > maxExamples ? "\n..." : "";
-			const badPixelsSummary = badPixels.length > 0
+			const ellipsize = differences.length > maxExamples ? "\n..." : "";
+			const differencesSummary = differences.length > 0
 				? `\`\`\`css\n${
-					Array.from(badPixels.slice(0, maxExamples))
-						.map(i => this.indexToPixel(i))
-						.map(p => `[${p.x}, ${p.y}] should be ${p.color}`)
+					Array.from(differences.slice(0, maxExamples))
+						.map(i => this.template.design.read(i))
+						.map(({ x, y }) => this.template.sample(x, y))
+						.map(({ x, y, designColor }) => `[${x}, ${y}] should be ${designColor.name}`)
 						.join("\n")
 				}${ellipsize}\`\`\``
 				: "";
@@ -409,9 +601,8 @@ export default class Template {
 				"hour": Interval.HOUR,
 				"day": Interval.DAY,
 			}).map(([label, interval]) => {
-				const goodProgress = this.histy.recentHits(interval);
-				const badProgress = this.croire.recentHits(interval);
-				const progress = goodProgress - badProgress;
+				const activity = this.template.recentActivity(interval);
+				const progress = activity.positive - activity.negative;
 
 				const rate = Math.abs(progress) / interval;
 				const isFast = rate > fast;
@@ -429,10 +620,10 @@ export default class Template {
 				return `${symbol} ${progress} pixels/${label}`;
 			});
 
-			const recencyDisclaimer = now - this.started < Interval.DAY
-				? `\n*started tracking ${humanTime(now - this.started)} ago*`
+			const recencyDisclaimer = now - this.template.started < Interval.DAY
+				? `\n*started tracking ${humanTime(now - this.template.started)} ago*`
 				: "";
-			const progressSummary = this.complete
+			const progressSummary = this.template.complete
 				? ""
 				: `\n\n${intervals.join("\n")}\n${
 					eta >= 0
@@ -442,160 +633,40 @@ export default class Template {
 
 			return `${overview}`
 				+ `${progressSummary}`
-				+ `${badPixelsSummary}`;
+				+ `${differencesSummary}`;
 		}
 	}
 
-	get placeableShadow() {
-		return Pxls.cropBuffer(
-			this.pxls.placemap, 
-			this.pxls.width,
-			this.pxls.height,
-			this.x,
-			this.y,
-			this.width,
-			this.height,
-			1,
-		);
+	get inline() {
+		if(is.undefined(this.source)) {
+			return this.name;
+		} else {
+			return `[${this.name}](${this.link})`;
+		}
 	}
 
-	get shadow() {
-		return Pxls.cropBuffer(
-			this.pxls.canvas, 
-			this.pxls.width,
-			this.pxls.height,
-			this.x,
-			this.y,
-			this.width,
-			this.height,
-			TRANSPARENT_PIXEL,
-		);
-	}
-
-	get rgba() {
-		return Pxls.convertBufferToRGBA(this.data, this.pxls.palette);
-	}
-
-	async save(file: string) {
-		const { width, height } = this;
-
-		await sharp(this.rgba as Buffer, { "raw": {
-			width,
-			height,
-			"channels": 4,
-		} }).toFile(file);
-	}
-
-	static async download(pxls: Pxls, templateURL: string) {
-		const params = hashParams(templateURL);
-
-		const template = params.get("template");
-		const tw = params.get("tw");
-		const name = params.get("title");
-
-		if(is.undefined(template)) {
-			throw new Error("Missing template source");
-		}
-
-		if(is.undefined(name)) {
-			throw new Error("Missing template name");
-		}
-
-		const source = new URL(template);
-
-		const { width, height, data } = await decodeTemplateImage(
-			pxls.palette, 
-			source,
-			is.undefined(tw) ? undefined : parseInt(tw)
-		);
-
-		const ox = params.get("ox");
-		const oy = params.get("oy");
-
-		return new Template(
-			pxls,
-			name,
-			is.undefined(ox) ? 0 : parseInt(ox),
-			is.undefined(oy) ? 0 : parseInt(oy),
-			width, 
-			height, 
-			source,
-			data, 
-			Date.now()
-		);
-	}
-
-	static async from(pxls: Pxls, name: string, directory: string, persistentData: unknown) {
-		if(!is.object(persistentData)) {
-			throw new Error("Invalid template data");
-		}
-		if(!hasTypedProperty(persistentData, "x", is.number)) {
-			throw new Error("Invalid template x position");
-		}
-		if(!hasTypedProperty(persistentData, "y", is.number)) {
-			throw new Error("Invalid template y position");
-		}
-		if(!hasTypedProperty(persistentData, "started", is.number)) {
-			throw new Error("Invalid template start time");
-		}
-		if(!hasProperty(persistentData, "history")) {
-			throw new Error("Invalid template history");
-		}
-
-		let source;
-
-		if(hasTypedProperty(persistentData, "source", is.string)) {
-			source = new URL(persistentData.source);
-		}
-
-		const imagePath = path.resolve(directory, `${name}.png`);
-
-		const im = sharp(imagePath);
-		const { width, height } = await im.metadata();
-
-		if(is.undefined(width)) {
-			throw new Error("Template image defines no width");
-		}
-		if(is.undefined(height)) {
-			throw new Error("Template image defines no height");
-		}
-
-		const data = await detemplatize(
-			await im.raw().toBuffer(),
-			width, height,
-			1, 1, 
-			pxls.palette
-		);
-
-		return new Template(
-			pxls,
-			name,
-			persistentData.x,
-			persistentData.y,
-			width,
-			height,
-			source,
-			data,
-			persistentData.started,
-			persistentData.history
-		);
-	}
-
-	get persistent() {
-		const { x, y, started, source } = this;
-		const history = {
-			"good": Array.from(this.histy.copyData()),
-			"bad": Array.from(this.croire.copyData()),
-			"timestamp": Date.now(),
-			"progress": this.rawProgress,
-		};
+	toJSON(): SaveableAs<SavedTrackedTemplate> {
+		const { name, source } = this;
 
 		return {
-			x,
-			y,
-			started,
-			history,
+			...this.template.toJSON(),
+			name, 
 			source,
 		};
 	}
+}
+
+export interface SavedTemplate {
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+	started?: number;
+	history?: Partial<Activity>;
+	progress?: number;
+}
+
+export interface SavedTrackedTemplate extends SavedTemplate {
+	name: string;
+	source?: URL;
 }

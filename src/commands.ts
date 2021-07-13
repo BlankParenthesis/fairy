@@ -219,13 +219,13 @@ export default new Map([
 				"ephemeral": true,
 			});
 			const url = requireStringOption(subCommand);
-			const { name, template } = await server.createTemplate(url);
-			await interaction.editReply(`Template “[${name}](${url})” added (${template.size} pixels).`);
+			const tracked = await server.createTemplate(url);
+			await interaction.editReply(`Template “${tracked.inline}” added (${tracked.template.size} pixels).`);
 		} else if(subCommand.name === "remove") {
 			const search = requireStringOption(subCommand);
-			const { name } = await server.removeTemplate(search);
+			const tracked = await server.removeTemplate(search);
 			await interaction.reply({
-				"content": `Template “${name}” removed.`,
+				"content": `Template “${tracked.inline}” removed.`,
 				"ephemeral": true,
 			});
 		} else if(subCommand.name === "list") {
@@ -238,9 +238,9 @@ export default new Map([
 			embed.setDescription(`Tracking ${server.templates.size} templates for this server:`);
 			embed.setColor([179, 0, 0]);
 
-			for(const [name, template] of server.templates.entries()) {
+			for(const tracked of server.templates.values()) {
 				// TODO: ensure list stays within Discord's embed count limit
-				embed.addField(name, `${template.size} pixels`);
+				embed.addField(tracked.name, `${tracked.template.size} pixels`, true);
 			}
 
 			await interaction.editReply({
@@ -311,6 +311,7 @@ export default new Map([
 
 		const [subCommand] = interaction.options.values();
 
+		// TODO: use message component select lists for selecting templates
 		if(subCommand.name === "post") {
 			await interaction.defer();
 

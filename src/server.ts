@@ -1,14 +1,21 @@
 import { promises as fs } from "fs";
 import * as path from "path";
+import { URL } from "url";
 
 import { DiscordAPIError, Guild, Message, Constants } from "discord.js";
-import { Pxls, TRANSPARENT_PIXEL } from "@blankparenthesis/pxlsspace";
+import { Pixel, Pxls } from "@blankparenthesis/pxlsspace";
 import * as is from "check-types";
 
 import Summary from "./summary";
-import Template from "./template";
+import { 
+	TrackableTemplate, 
+	TrackedTemplate, 
+	StylizedTemplateDesign, 
+	TemplateDesign, 
+	SavedTrackedTemplate,
+} from "./template";
 
-import { hashParams, escapeRegExp, hasProperty, sum } from "./util";
+import { hashParams, escapeRegExp, hasTypedProperty, sum, parseIntOrDefault } from "./util";
 
 // TODO: config option for space limit and summary limit
 // 25 MB of memory space in major buffers
@@ -21,7 +28,7 @@ export default class ServerHandler {
 	private pxls: Pxls;
 	private guild: Guild;
 
-	readonly templates: Map<string, Template> = new Map();
+	readonly templates: Map<string, TrackedTemplate> = new Map();
 	summaries: Summary[] = [];
 
 	private canvasCode?: string;
@@ -36,23 +43,26 @@ export default class ServerHandler {
 		this.pxls.on("sync", async ({ metadata }) => {
 			await this.maybeReset(metadata.canvasCode);
 
-			for(const template of this.templates.values()) {
+			const templates = Array.from(this.templates.values())
+				.map(t => t.template);
+
+			for(const template of templates) {
 				template.sync();
 			}
 		});
 	}
 
-	pixel(x: number, y: number, color: number, oldColor?: number) {
-		for(const template of this.templates.values()) {
-			const templateColor = template.at(x, y);
-			if(templateColor === TRANSPARENT_PIXEL) {
-				continue;
-			}
+	pixel(pixel: Pixel & { oldColor: number }) {
+		const templates = Array.from(this.templates.values())
+			.map(t => t.template);
 
-			if(templateColor === color) {
-				template.goodPixel();
-			} else if(oldColor === template.at(x, y)) {
-				template.badPixel();
+		for(const template of templates) {
+			const x = pixel.x - template.x;
+			const y = pixel.y - template.x;
+
+			if(x > 0 && x < template.width && y > 0 && y < template.height) { 
+				const i = y * template.width + x;
+				template.sync(new Map([[i, pixel]]));
 			}
 		}
 	}
@@ -100,43 +110,69 @@ export default class ServerHandler {
 					console.debug(`Dropping summary whose message seems deleted: ${e.message}`);
 					this.forgetSummary(s);
 				} else {
-					console.debug(`Failed to update summary: ${e.message}`);
+					console.debug("Failed to update summary:", e);
 				}
 			}
 		}));
 	}
 
 	async createTemplate(url: string) {
-		const name = hashParams(url).get("title");
+		const { title, template, ox, oy, tw } = hashParams(url);
 
-		if(!name) {
+		if(is.undefined(template)) {
+			throw new Error("Missing template source");
+		}
+
+		if(is.undefined(title) || title.trim() === "") {
 			throw new Error("Template requires a title");
 		}
 
 		let usedSpace = Array.from(this.templates.values())
+			.map(t => t.template)
 			.map(t => t.space)
 			.reduce(sum, 0);
 
-		const existingTemplate = this.templates.get(name);
+		const existingTemplate = this.templates.get(title);
 		if(!is.undefined(existingTemplate)) {
-			usedSpace = usedSpace - existingTemplate.space;
+			usedSpace = usedSpace - existingTemplate.template.space;
 		}
 
-		const template = await Template.download(this.pxls, url);
+		const source = new URL(template);
+		const width = parseInt(tw) > 0 ? parseInt(tw) : undefined;
 
-		if(template.space + usedSpace > SPACE_LIMIT) {
+		const design = (await StylizedTemplateDesign.download(
+			source,
+			width,
+			this.pxls.palette,
+		)).unstylize();
+
+		const trackable = new TrackableTemplate(
+			this.pxls,
+			design,
+			parseIntOrDefault(ox, 0),
+			parseIntOrDefault(oy, 0),
+			Date.now(),
+		);
+
+		if(trackable.space + usedSpace > SPACE_LIMIT) {
 			throw new Error(
 				"Server memory limit reached — " +
 				"use smaller templates if possible " +
-				`(need ${template.space} bytes, used ${usedSpace} of ${SPACE_LIMIT} bytes)`
+				`(need ${trackable.space} bytes, used ${usedSpace} of ${SPACE_LIMIT} bytes)`
 			);
 		} 
 
 		// TODO: use file hash for saved templates
-		await template.save(path.resolve(this.templateDir, `${name}.png`));
-		this.templates.set(name, template);
+		await design.save(
+			path.resolve(this.templateDir, `${title}.png`),
+			this.pxls.palette
+		);
 
-		return { name, template };
+		const tracked = new TrackedTemplate(trackable, title, source);
+		
+		this.templates.set(title, tracked);
+
+		return tracked;
 	}
 
 	async removeTemplate(search: string) {
@@ -151,7 +187,7 @@ export default class ServerHandler {
 		this.templates.delete(name);
 		await this.cleanUnusedTemplateFiles();
 
-		return { name, template };
+		return template;
 	}
 
 	async load() {
@@ -170,40 +206,133 @@ export default class ServerHandler {
 				try {
 					persistentData = JSON.parse((await fs.readFile(this.persistentDataPath)).toString()) as unknown;
 				} catch(e) {
-					// ignored
+					console.debug(e);
 				}
 
 				if(is.object(persistentData)) {
-					const templates = (hasProperty(persistentData, "templates")
-							&& is.object(persistentData.templates))
-						? persistentData.templates
-						: {};
-					const summaries = (hasProperty(persistentData, "summaries")
-							&& Array.isArray(persistentData.summaries))
+					const templates = (hasTypedProperty(persistentData, "templates", is.array))
+						? persistentData.templates as unknown[]
+						: (hasTypedProperty(persistentData, "templates", is.object))
+							? Array.from(Object.entries(persistentData.templates)).map(([name, saved]) => {
+								// convert from old format
+								try {
+									const template = { name } as Partial<SavedTrackedTemplate>; 
+
+									if(!is.object(saved)) {
+										throw new Error("template not an object");
+									}
+
+									if(hasTypedProperty(saved, "x", is.number)) {
+										template.x = saved.x;
+									} else {
+										throw new Error("template has no x");
+									}
+		
+									if(hasTypedProperty(saved, "y", is.number)) {
+										template.y = saved.y;
+									} else {
+										throw new Error("template has no y");
+									}
+									
+									if(hasTypedProperty(saved, "started", is.number)) {
+										template.started = saved.started;
+									}
+
+									if(hasTypedProperty(saved, "history", is.object)) {
+										template.history = {};
+
+										if(hasTypedProperty(saved.history, "good", is.array)) {
+											template.history.positive = saved.history.good;
+										}
+
+										if(hasTypedProperty(saved.history, "bad", is.array)) {
+											template.history.negative = saved.history.bad;
+										}
+
+										if(hasTypedProperty(saved.history, "progress", is.number)) {
+											template.progress = saved.history.progress;
+										}
+									
+										if(hasTypedProperty(saved.history, "timestamp", is.number)) {
+											template.history.timestamp = saved.history.timestamp;
+										}
+									}
+
+									if(hasTypedProperty(saved, "source", is.string)) {
+										template.source = new URL(saved.source);
+									}
+
+									return template;
+								} catch(e) {
+									console.warn("Failed to convert old template: ", e);
+								}
+							})
+							: [];
+					const summaries = (hasTypedProperty(persistentData, "summaries", is.array))
 						? persistentData.summaries as unknown[]
 						: [];
 
-					this.canvasCode = hasProperty(persistentData, "canvasCode")
-							&& is.string(persistentData.canvasCode)
+					this.canvasCode = hasTypedProperty(persistentData, "canvasCode", is.string)
 						? persistentData.canvasCode
 						: this.pxls.canvasCode;
 
 					this.templates.clear();
 
-					await Promise.all(Object.entries(templates).map(async ([name, data]) => {
-						let template = null;
-
+					await Promise.all(templates.map(async data => {
 						try {
-							template = await Template.from(this.pxls, name, this.templateDir, data);
+							if(!is.object(data)) {
+								throw new Error("saved template not an object");
+							}
+
+							const saved = data as Partial<SavedTrackedTemplate>;
+
+							if(!hasTypedProperty(saved, "name", is.string)) {
+								throw new Error("template has no name");
+							}
+
+							if(!hasTypedProperty(saved, "x", is.number)) {
+								throw new Error("template has no x");
+							}
+
+							if(!hasTypedProperty(saved, "y", is.number)) {
+								throw new Error("template has no y");
+							}
+
+							if(!hasTypedProperty(saved, "started", is.number)) {
+								saved.started = Date.now();
+							}
+
+							if(!hasTypedProperty(saved, "progress", is.number)) {
+								(saved as any).progress = undefined;
+								// convince typescript that the above assignment happened
+								if(!hasTypedProperty(saved, "progress", is.undefined)) {
+									throw new Error("never");
+								}
+							}
+
+							const trackable = new TrackableTemplate(
+								this.pxls, 
+								await TemplateDesign.load(
+									path.resolve(this.templateDir, `${saved.name}.png`),
+									this.pxls.palette,
+								),
+								saved.x,
+								saved.y,
+								saved.started as number,
+								saved.history, 
+								saved.progress, 
+							);
+
+							if(this.templates.has(saved.name)) {
+								throw new Error("duplicate template definition");
+							}
+
+							const tracked = new TrackedTemplate(trackable, saved.name, saved.source);
+		
+							this.templates.set(tracked.name, tracked);
 						} catch(e) {
 							console.warn("Failed to load template: ", e);
 						}
-
-						if(template === null) {
-							return;
-						}
-
-						this.templates.set(name, template);
 					}));
 
 					this.summaries = (await Promise.all(
@@ -227,7 +356,7 @@ export default class ServerHandler {
 		if(!this.loadedonce) {
 			await this.load();
 		}
-		await fs.writeFile(this.persistentDataPath, JSON.stringify(this.persistent));
+		await fs.writeFile(this.persistentDataPath, JSON.stringify(this));
 	}
 
 	private async ensureDirectories() {
@@ -292,11 +421,10 @@ export default class ServerHandler {
 		return path.resolve(this.baseDir, "persistent.json");
 	}
 
-	get persistent() {
+	toJSON() {
 		return {
-			"templates": Object.fromEntries(Array.from(this.templates.entries())
-				.map(([name, template]) => [name, template.persistent])),
-			"summaries": this.summaries.map(s => s.persistent),
+			"templates": Array.from(this.templates.values()),
+			"summaries": this.summaries,
 			"canvasCode": this.canvasCode,
 		};
 	}

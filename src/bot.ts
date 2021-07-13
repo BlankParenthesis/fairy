@@ -266,9 +266,12 @@ pxls.on("disconnect", () => set(discordUp, false));
 pxls.connect();
 
 pxls.on("pixel", p => {
-	const { x, y, color, oldColor } = p;
-	for(const server of SERVERS.values()) {
-		server.pixel(x, y, color, oldColor);
+	if(is.undefined(p.oldColor)) {
+		console.warn("Missing old color data for pixel: ", p);
+	} else {
+		for(const server of SERVERS.values()) {
+			server.pixel(p as Required<typeof p>);
+		}
 	}
 });
 

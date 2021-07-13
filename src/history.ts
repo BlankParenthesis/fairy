@@ -110,4 +110,8 @@ export default class Histoire {
 	copyData() {
 		return new Uint16Array(this.data);
 	}
+
+	toJSON() {
+		return Array.from(this.data);
+	}
 }
