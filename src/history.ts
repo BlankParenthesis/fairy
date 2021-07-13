@@ -28,7 +28,7 @@ class RollingBuffer extends Uint16Array {
 	}
 }
 
-const distributeIntValue = function * (total: number, count: number) {
+function * distributeIntValue(total: number, count: number) {
 	const quotient = Math.floor(total / count);
 	const remainder = total % count;
 
@@ -45,7 +45,7 @@ const distributeIntValue = function * (total: number, count: number) {
 	}
 
 	console.assert(currentRemainder === 0);
-};
+}
 
 export default class Histoire {
 	private data: RollingBuffer;

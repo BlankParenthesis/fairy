@@ -562,7 +562,7 @@ export class TrackedTemplate {
 
 		const { progress } = this.template;
 
-		const link = !is.undefined(this.source) ? `[template link](${this.link})\n` : "";
+		const link = !is.undefined(this.source) ? `[template link](${this.inline})\n` : "";
 		const formattedProgress = parseFloat((progress / size * 100).toFixed(2));
 
 		const unplaceablePixels = size - this.template.placeableSize;

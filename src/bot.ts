@@ -35,7 +35,7 @@ const pxls = new Pxls({ "buffers": [BufferType.CANVAS, BufferType.PLACEMAP] });
 pxls.on("error", e => console.error("Pxls error: ", e));
 
 const SERVERS: Map<string, ServerHandler> = new Map();
-const init = async () => {
+async function init() {
 	if(fairy.application === null) {
 		throw new Error("https://www.youtube.com/watch?v=2-NRYjSpVAU");
 	}
@@ -73,12 +73,12 @@ const init = async () => {
 	} catch(e) {
 		console.error("Failed to load template:", e);
 	}
-};
+}
 
 let first = true;
 let discordUp = false;
 let pxlsUp = false;
-const set = (d: boolean, p: boolean) => {
+function set(d: boolean, p: boolean) {
 	const bad = (!d || !p) && discordUp && pxlsUp;
 
 	if(d !== discordUp) {
@@ -111,7 +111,7 @@ const set = (d: boolean, p: boolean) => {
 	} else if(bad) {
 		console.log("😣 We're down");
 	}
-};
+}
 
 fairy.on("ready", () => set(true, pxlsUp));
 fairy.on("disconnect", () => set(false, pxlsUp));
@@ -275,7 +275,7 @@ pxls.on("pixel", p => {
 	}
 });
 
-const update = async () => {
+async function update() {
 	try {
 		if(!pxlsUp) {
 			return;
@@ -284,7 +284,7 @@ const update = async () => {
 	} catch(e) {
 		console.error("Couldn't update all summaries:", e);
 	}
-};
+}
 
 const msUntilMinuteEpoch = (60 - (new Date()).getSeconds()) * 1000;
 setTimeout(

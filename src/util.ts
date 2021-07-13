@@ -1,11 +1,10 @@
 import * as is from "check-types";
-import { SavedTemplate } from "./template";
 
-// TODO: use declaration style functions — they're more readable imo
+export function sleep(t: number) {
+	return new Promise(resolve => setTimeout(resolve, t));
+}
 
-export const sleep = (t: number) => new Promise(resolve => setTimeout(resolve, t));
-
-export const humanTime = (t: number) => {
+export function humanTime(t: number) {
 	let time = t / 1000; // seconds
 	if(time < 120) {
 		return `${Math.round(time)} second${Math.round(time) === 1 ? "" : "s"}`;
@@ -20,17 +19,19 @@ export const humanTime = (t: number) => {
 	}
 	time /= 24; // days
 	return `${Math.round(time)} day${Math.round(time) === 1 ? "" : "s"}`;
-};
+}
 
-export const zip = <A, B>(a: ArrayLike<A>, b: ArrayLike<B>) => {
+export function zip<A, B>(a: ArrayLike<A>, b: ArrayLike<B>) {
 	const c: [A, B][] = new Array(a.length);
 	for(let i = 0; i < a.length; i++) {
 		c[i] = [a[i], b[i]];
 	}
 	return c;
-};
+}
 
-export const sum = (a: number, b: number) => a + b;
+export function sum(a: number, b: number) {
+	return a + b;
+}
 
 // TODO: create time module or use new ECMA time stuff
 
@@ -73,7 +74,7 @@ export const Interval = (() => {
 	};
 })();
 
-export const hashParams = (url: string) => {
+export function hashParams(url: string) {
 	if(url.indexOf("#") === -1) {
 		throw new Error("need template data");
 	}
@@ -84,34 +85,36 @@ export const hashParams = (url: string) => {
 		.map(e => [e[0], decodeURIComponent(e[1])]);
 
 	return Object.fromEntries(entries);
-};
+}
 
-export const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+export function escapeRegExp(s: string) {
+	return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
-export const hasProperty = <
+export function hasProperty <
 	X extends {}, 
 	Y extends PropertyKey
->(object: X, property: Y): object is X & Record<Y, unknown> => {
+>(object: X, property: Y): object is X & Record<Y, unknown> {
 	return Object.prototype.hasOwnProperty.call(object, property);
-};
+}
 
-export const hasTypedProperty = <
+export function hasTypedProperty <
 	X extends {}, 
 	Y extends PropertyKey,
 	T,
->(object: X, property: Y, guard: (_: unknown) => _ is T): object is X & Record<Y, T> => {
+>(object: X, property: Y, guard: (_: unknown) => _ is T): object is X & Record<Y, T> {
 	return Object.prototype.hasOwnProperty.call(object, property)
 			&& guard(object[property as keyof object]);
-};
+}
 
-export const parseIntOrDefault = <T>(string: string | undefined, defaultValue: T) => {
+export function parseIntOrDefault <T>(string: string | undefined, defaultValue: T) {
 	let parsed;
 	if(is.undefined(string) || isNaN(parsed = parseInt(string))) {
 		return defaultValue;
 	} else {
 		return parsed;
 	}
-};
+}
 
 export type SaveableAs<To> = {
 	[K in keyof To]: To[K] | {

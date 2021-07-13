@@ -120,12 +120,14 @@ class Command {
 
 const PRIVILEGED = [Permissions.FLAGS.MANAGE_GUILD, Permissions.FLAGS.ADMINISTRATOR];
 
-const memberIsMod = (member: GuildMember) => member.permissions.has(PRIVILEGED);
+function memberIsMod(member: GuildMember) {
+	return member.permissions.has(PRIVILEGED);
+}
 
 const NON_GUILD_MEMBER_RESPONSE = "Commands must be used by a server member";
 const LACKS_PERMISSIONS_RESPONSE = "“Manage Server” permission required";
 
-const requireStringOption = (command: CommandInteractionOption, index = 0) => {
+function requireStringOption(command: CommandInteractionOption, index = 0) {
 	if(is.undefined(command.options)) {
 		throw new Error("Internal Discord command malformed");
 	}
@@ -142,10 +144,12 @@ const requireStringOption = (command: CommandInteractionOption, index = 0) => {
 		throw new Error("Internal Discord command malformed");
 	}
 	return option;
-};
+}
 
-const parseTemplates = (input: string) => input.split(",").map(t => t.trim());
-const parseSummary = (input: string, server: Server) => {
+function parseTemplates(input: string) {
+	return input.split(",").map(t => t.trim());
+}
+function parseSummary(input: string, server: Server) {
 	let messageId = input;
 	if(!/^[0-9]+$/.test(messageId)) {
 		const match = messageId.match(/^https?:[/][/]discord[.]com[/]channels[/]([0-9]+)[/]([0-9]+)[/]([0-9]+)/);
@@ -163,7 +167,7 @@ const parseSummary = (input: string, server: Server) => {
 	}
 
 	return server.findSummary(messageId);
-};
+}
 
 export default new Map([
 	// TODO: template post {template_name}
@@ -326,9 +330,7 @@ export default new Map([
 			});
 			const message = await interaction.fetchReply();
 
-			const castToMessage = (message: any): message is Message => message instanceof Message;
-
-			if(!castToMessage(message)) {
+			if(!(message instanceof Message)) {
 				throw new Error("Internal assertion failed: reply message is of wrong type");
 			}
 

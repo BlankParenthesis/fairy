@@ -8,7 +8,7 @@ import config, { FilterType } from "./config";
 
 const MEGABYTE = 10 ** 6;
 
-export const download = async (url: URL) => {
+export async function download (url: URL) {
 	const urlIsKnown = config.download.filter.domains.includes(url.hostname);
 	const wantKnownURL = config.download.filter.type === FilterType.ALLOW;
 
@@ -26,9 +26,9 @@ export const download = async (url: URL) => {
 		// full global template, custom symbols: ~~6.7 MB~~ about 10MB (6.7 was webp)
 		"size": 16 * MEGABYTE,
 	});
-};
+}
 
-export const downloadImage = async (url: URL) => {
+export async function downloadImage(url: URL) {
 	const image = await download(url);
 
 	const im = sharp(await image.buffer());
@@ -45,4 +45,4 @@ export const downloadImage = async (url: URL) => {
 	const data = Uint8Array.from(await im.raw().toBuffer());
 
 	return { width, height, data };
-};
+}

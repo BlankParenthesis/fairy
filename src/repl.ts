@@ -21,9 +21,13 @@ const CSI = "\u009b";
 const DISPLAY_RESET = `${CSI}J`;
 // A is the control sequence for "move cursor up". 
 // The number preceding is the number of rows.
-const MOVE_UP = (rows: number) => (!isNaN(rows) && rows > 0)
-	? `${CSI}${rows}A`
-	: "";
+function MOVE_UP(rows: number) {
+	if(!isNaN(rows) && rows > 0) {
+		return `${CSI}${rows}A`;
+	} else {
+		return "";
+	}
+}
 
 export enum LogLevel {
 	LOG = 0,
