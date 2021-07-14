@@ -12,6 +12,7 @@ import Cache from "./cache";
 import { downloadImage } from "./download";
 
 import { multiply, add, diff, mask, index, unstylize } from "../native";
+import { Summarizable } from "./summary";
 
 enum IndexMethod {
 	EXACT,
@@ -44,7 +45,11 @@ class IndexedArray extends Uint8Array {
 				throw new Error(`Unimplemented indexing method ${method}`);
 			}
 		}
+	}
 
+	equals(other: IndexedArray) {
+		return this.length === other.length
+			&& diff(this, other).length === 0;
 	}
 }
 
@@ -118,6 +123,12 @@ export class TemplateDesign {
 	}
 
 	// TODO: stylize()
+
+	equals(other: TemplateDesign) {
+		return this.width === other.width
+			&& this.height === other.height
+			&& this.data === other.data;
+	}
 }
 
 export class StylizedTemplateDesign {
@@ -245,6 +256,12 @@ export class Template {
 	resourced(source?: URL) {
 		return new Template(this.design, this.x, this.y, this.title, source);
 	}
+
+	equals(other: Template) {
+		return this.x === other.x
+			&& this.y === other.y
+			&& this.design.equals(other.design);
+	}
 }
 
 const HISTORY_RANGE = Interval.DAY * 7;
@@ -301,7 +318,7 @@ export class TemplateActivity {
 		};
 	}
 
-	toJSON(): SaveableAs<Required<Activity>> {
+	toJSON(): SaveableAs<Activity> {
 		return {
 			"positive": this.histy,
 			"neutral": this.neutral,
@@ -522,22 +539,26 @@ export class TrackableTemplate extends Template {
 		return this.width * this.height + 3 * HISTORY_SIZE * 2;
 	}
 
-	toJSON(): SaveableAs<Required<SavedTemplate>> {
-		const { x, y, width, height, history, lastProgress, started } = this;
+	toJSON(): SaveableAs<SavedTrackableTemplate> {
+		const { x, y, history, lastProgress, started } = this;
 
 		return {
 			x, 
 			y, 
-			width, 
-			height, 
 			started,
 			history,
 			"progress": lastProgress,
+			"design": this.design.hash,
 		};
+	}
+
+	equals(other: TrackableTemplate) {
+		return this.pxls === other.pxls
+			&& super.equals(other);
 	}
 }
 
-export class TrackedTemplate {
+export class TrackedTemplate implements Summarizable {
 	constructor(
 		readonly template: TrackableTemplate,
 		readonly name: string,
@@ -562,7 +583,7 @@ export class TrackedTemplate {
 
 		const { progress } = this.template;
 
-		const link = !is.undefined(this.source) ? `[template link](${this.inline})\n` : "";
+		const link = !is.undefined(this.source) ? `[template link](${this.link})\n` : "";
 		const formattedProgress = parseFloat((progress / size * 100).toFixed(2));
 
 		const unplaceablePixels = size - this.template.placeableSize;
@@ -641,32 +662,41 @@ export class TrackedTemplate {
 		if(is.undefined(this.source)) {
 			return this.name;
 		} else {
-			return `[${this.name}](${this.link})`;
+			return `[${this.name}](<${this.link}>)`;
 		}
 	}
 
 	toJSON(): SaveableAs<SavedTrackedTemplate> {
 		const { name, source } = this;
 
-		return {
-			...this.template.toJSON(),
-			name, 
-			source,
-		};
+		const { x, y } = this.template;
+		const design = this.template.design.hash;
+
+		const template = { design, x, y };
+
+		return { name, source, template };
 	}
 }
 
 export interface SavedTemplate {
+	/**
+	 * The hash of the design
+	 */
+	design: string;
 	x: number;
 	y: number;
-	width: number;
-	height: number;
-	started?: number;
-	history?: Partial<Activity>;
-	progress?: number;
+	title?: string;
+	source?: string;
 }
 
-export interface SavedTrackedTemplate extends SavedTemplate {
+export interface SavedTrackableTemplate extends SavedTemplate {
+	started: number;
+	history: Partial<Activity>;
+	progress: number;
+}
+
+export interface SavedTrackedTemplate {
 	name: string;
-	source?: URL;
+	source?: string;
+	template: SavedTemplate;
 }

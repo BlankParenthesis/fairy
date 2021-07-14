@@ -1,21 +1,20 @@
-import is = require("check-types");
-import { MessageEmbed, Message, Guild, TextChannel, DiscordAPIError, Constants } from "discord.js";
+import { MessageEmbed, Message, GuildChannel, Snowflake } from "discord.js";
 
-import ServerHandler, { SUMMARY_LIMIT } from "./server";
-import { hasProperty, sleep, Interval, sum } from "./util";
+import { SavedTemplate, SavedTrackedTemplate, Template, TrackableTemplate, TrackedTemplate } from "./template";
+import { SaveableAs } from "./util";
+
+export interface Summarizable {
+	name: string;
+	summary: string;
+}
 
 export default class Summary {
-	private readonly serverHandler: ServerHandler;
-	private readonly message: Message;
-	private templates: string[];
+	constructor(
+		private fields: Summarizable[],
+		private message: Message,
+	) {}
 
-	constructor(serverHandler: ServerHandler, message: Message, templates: string[] = []) {
-		this.serverHandler = serverHandler;
-		this.message = message;
-		this.templates = templates;
-	}
-
-	static embed(serverHandler: ServerHandler, templates: string[], final = false) {
+	embed(final = false) {
 		const embedObject = new MessageEmbed();
 
 		embedObject.setTitle("Template progress");
@@ -27,12 +26,9 @@ export default class Summary {
 		}
 
 		// TODO: ensure list stays within Discord's embed count limit
-		templates.map(t => serverHandler.findTemplate(t))
-			.filter((t): t is Exclude<typeof t, null> => t !== null)
-			.map(({ template }) => template)
-			.forEach(tracked => {
-				embedObject.addField(tracked.name, tracked.summary, true);
-			});
+		for(const field of this.fields) {
+			embedObject.addField(field.name, field.summary, true);
+		}
 
 		return embedObject;
 	}
@@ -42,30 +38,18 @@ export default class Summary {
 	}
 
 	get size() {
-		return this.templates.length;
+		return this.fields.length;
 	}
 
 	async update(final = false) {
 		await this.message.edit({ 
-			"embed": Summary.embed(this.serverHandler, this.templates, final),
+			"embed": this.embed(final),
 		});
 	}
 
-	async modify(templates: string[]) {
-		// TODO: reduce code duplication with server
-		const totalSummarizations = this.serverHandler.summaries
-			.map(s => s.size)
-			.reduce(sum, 0) - this.templates.length;
-		
-		if(totalSummarizations + templates.length > SUMMARY_LIMIT) {
-			throw new Error(
-				"Server summary limit reached; " +
-				`no more than ${SUMMARY_LIMIT} templates between all summaries ` +
-				"(including duplicates)"
-			);
-		}
+	async modify(fields: Summarizable[]) {
+		this.fields = fields;
 
-		this.templates = templates;
 		await this.update();
 	}
 
@@ -73,67 +57,27 @@ export default class Summary {
 		await this.update(true);
 	}
 
-	static async from(serverHandler: ServerHandler, guild: Guild, data: unknown) {
-		if(!is.object(data)
-			|| !hasProperty(data, "channel")
-			|| !hasProperty(data, "message")
-			|| !hasProperty(data, "templates")
-		) {
-			console.warn(`Malformed summary in guild ${guild.id}`);
-			return null;
-		}
-
-		const channel = guild.channels.cache.get(data.channel as any);
-		if(is.undefined(channel)) {
-			console.warn(`Malformed channel for summary in guild ${guild.id}`);
-			return null;
-		}
-
-		if(!["text", "news"].includes(channel.type)) {
-			console.warn(`Invalid channel for summary in guild ${guild.id}`);
-			return null;
-		}
-
-		const textChannel = channel as TextChannel;
-
-		let message: Message | undefined = undefined;
-		while(is.undefined(message)) {
-			try {
-				message = await textChannel.messages.fetch(data.message as any);
-			} catch(e) {
-				if(e instanceof DiscordAPIError && [
-					Constants.APIErrors.UNKNOWN_GUILD, // we don't expect this but just in case…
-					Constants.APIErrors.UNKNOWN_CHANNEL, 
-					Constants.APIErrors.UNKNOWN_MESSAGE, 
-				].includes(e.code as any)) {
-					console.debug(`Missing message for summary in guild ${guild.id}`);
-					return null;
-				}
-
-				// presume network error and try again in 30 seconds
-				console.warn(
-					`Failed to fetch message for summary in guild ${guild.id}: ${e.message}.\n`
-					+ "Will try again soon."
-				);
-				await sleep(Interval.SECOND * 30);
-			}
-		}
-
-		const { templates } = data;
-
-		if(!(templates instanceof Array)) {
-			console.warn(`Malformed template list for summary in guild ${guild.id}`);
-			return null;
-		}
-
-		return new Summary(serverHandler, message, templates.filter(s => is.string(s)));
-	}
-
-	toJSON() {
+	toJSON(): SaveableAs<SavedSummary> {
 		return {
 			"channel": this.message.channel.id,
 			"message": this.message.id,
-			"templates": this.templates,
+			"fields": this.fields.map(f => f as TrackedTemplate),
 		};
 	}
+
+	displays(template: TrackableTemplate) {
+		return this.fields.some(field => {
+			if(field instanceof TrackedTemplate) {
+				return field.template.equals(template);
+			} else {
+				return false;
+			}
+		});
+	}
+}
+
+export interface SavedSummary {
+	channel: Snowflake;
+	message: Snowflake;
+	fields: SavedTrackedTemplate[];
 }

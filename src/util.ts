@@ -4,6 +4,7 @@ export function sleep(t: number) {
 	return new Promise(resolve => setTimeout(resolve, t));
 }
 
+// TODO: replace with discord's fancy timestamp embeds (<t:186491862412837>)
 export function humanTime(t: number) {
 	let time = t / 1000; // seconds
 	if(time < 120) {
@@ -117,7 +118,11 @@ export function parseIntOrDefault <T>(string: string | undefined, defaultValue: 
 }
 
 export type SaveableAs<To> = {
-	[K in keyof To]: To[K] | {
+	[K in keyof To]: To[K] extends (infer I)[] 
+	? SaveableAs<I>[] | To[K] | {
+		"toJSON": () => To[K] | SaveableAs<To[K]>;
+	}
+	: To[K] | {
 		"toJSON": () => To[K] | SaveableAs<To[K]>;
 	};
 };
