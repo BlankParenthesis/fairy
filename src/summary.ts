@@ -1,6 +1,6 @@
-import { MessageEmbed, Message, GuildChannel, Snowflake } from "discord.js";
+import { MessageEmbed, Message, Snowflake } from "discord.js";
 
-import { SavedTemplate, SavedTrackedTemplate, Template, TrackableTemplate, TrackedTemplate } from "./template";
+import { SavedTrackedTemplate, TrackableTemplate, TrackedTemplate } from "./template";
 import { SaveableAs } from "./util";
 
 export interface Summarizable {
@@ -43,7 +43,7 @@ export default class Summary {
 
 	async update(final = false) {
 		await this.message.edit({ 
-			"embed": this.embed(final),
+			"embeds": [this.embed(final)],
 		});
 	}
 

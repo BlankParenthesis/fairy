@@ -2,7 +2,7 @@ import * as path from "path";
 import * as util from "util";
 import { promises as fs } from "fs";
 
-import { Client, Constants, DiscordAPIError, DMChannel, Intents, Snowflake, TextChannel } from "discord.js";
+import { Client, Constants, DiscordAPIError, DMChannel, Guild, Intents, Snowflake, TextChannel } from "discord.js";
 import * as chalk from "chalk";
 import { Pxls, BufferType } from "@blankparenthesis/pxlsspace";
 import is = require("check-types");
@@ -277,7 +277,7 @@ const serverLimiters: Limiter<Snowflake>[] = config.interaction.limiter.server.m
 	new Limiter(l.limit, l.interval)
 );
 
-discord.on("interaction", async interaction => {
+discord.on("interactionCreate", async interaction => {
 	if(interaction.isCommand()) {
 		const command = commands.get(interaction.commandName);
 		if(!is.undefined(command)) {
@@ -298,8 +298,10 @@ discord.on("interaction", async interaction => {
 
 			userLimiters.forEach(l => l.use(userId));
 
-			if(interaction.guildID) {
-				const limitedServerLimiter = serverLimiters.find(l => !l.canUse(interaction.guildID as Snowflake));
+			if(!is.null(interaction.guild)) {
+				const limitedServerLimiter = serverLimiters.find(
+					limiter => !limiter.canUse((interaction.guild as Guild).id as Snowflake)
+				);
 
 				if(!is.undefined(limitedServerLimiter)) {
 					const readableCooldown = humanTime(limitedServerLimiter.timeUntilRefresh);
@@ -316,8 +318,9 @@ discord.on("interaction", async interaction => {
 			try {
 				await command.execute(interaction, { designs, templates, summaries, pxls });
 
-				if(interaction.guildID) {
-					serverLimiters.forEach(l => l.use(interaction.guildID as Snowflake));
+				if(!is.null(interaction.guild)) {
+					serverLimiters.forEach(
+						limiter => limiter.use((interaction.guild as Guild).id as Snowflake));
 				}
 			} catch(e) {
 				const errorResponse = `Problem: ${e.message}.`;

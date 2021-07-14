@@ -359,7 +359,7 @@ export default new Map([
 				templates.push(template);
 			}
 
-			if(interaction.guildID === null) {
+			if(is.null(interaction.guild)) {
 				await interaction.user.createDM();
 			}
 
@@ -402,7 +402,7 @@ export default new Map([
 			const messageOption = requireStringOption(subCommand, 0);
 			const links = getLinks(subCommand, 1);
 
-			const messageID = parseMessageReference(messageOption, interaction.channel);
+			const messageID = parseMessageReference(messageOption, interaction.channel as Channel);
 
 			const summary = state.summaries.find(summary => summary.id === messageID);
 
@@ -461,7 +461,7 @@ export default new Map([
 			await interaction.defer({ "ephemeral": true });
 
 			const summaryId = requireStringOption(subCommand);
-			const messageID = parseMessageReference(summaryId, interaction.channel);
+			const messageID = parseMessageReference(summaryId, interaction.channel as Channel);
 			const summary = state.summaries.find(summary => summary.id === messageID);
 
 			if(!summary) {
