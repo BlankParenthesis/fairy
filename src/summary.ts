@@ -11,7 +11,7 @@ export interface Summarizable {
 export default class Summary {
 	constructor(
 		private fields: Summarizable[],
-		private message: Message,
+		readonly message: Message,
 	) {}
 
 	embed(final = false) {

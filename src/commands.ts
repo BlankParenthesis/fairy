@@ -24,7 +24,7 @@ const { ApplicationCommandOptionTypes } = Constants;
 
 import Summary from "./summary";
 import { StylizedTemplateDesign, TemplateDesign, TrackableTemplate, TrackedTemplate } from "./template";
-import { hashParams, parseIntOrDefault, zip } from "./util";
+import { hashParams, parseIntOrDefault, sum, zip } from "./util";
 import Pxls from "@blankparenthesis/pxlsspace";
 
 interface State {
@@ -253,6 +253,10 @@ function TEMPLATE_LINK_OPTION(index: number, required = false) {
 	};
 }
 
+// 25 Megabytes
+const SPACE_LIMIT = 25 * 10 ** 6;
+const MAX_SUMMARIES = 10;
+
 export default new Map([
 	// TODO: special summary entries for board buffers:
 	/*
@@ -334,25 +338,17 @@ export default new Map([
 		if(subCommand.name === "post") {
 			await interaction.defer();
 
-			/*
-			let usedSpace = Array.from(this.templates.values())
-				.map(t => t.template)
-				.map(t => t.space)
-				.reduce(sum, 0);
+			const summaries = state.summaries.filter(summary => {
+				if(interaction.channel instanceof GuildChannel) {
+					return interaction.channel.guild === summary.message.guild;
+				} else {
+					return summary.message.channel === interaction.channel;
+				}
+			});
 
-			const existingTemplate = this.templates.get(title);
-			if(!is.undefined(existingTemplate)) {
-				usedSpace = usedSpace - existingTemplate.template.space;
+			if(summaries.length + 1 > MAX_SUMMARIES) {
+				throw new Error("Max summaries reached, freeze some before posting any more");
 			}
-
-			if(trackable.space + usedSpace > SPACE_LIMIT) {
-				throw new Error(
-					"Server memory limit reached — " +
-					"use smaller templates if possible " +
-					`(need ${trackable.space} bytes, used ${usedSpace} of ${SPACE_LIMIT} bytes)`
-				);
-			} 
-			*/
 
 			const links = getLinks(subCommand);
 			const templates = [];
@@ -366,6 +362,27 @@ export default new Map([
 			if(interaction.guildID === null) {
 				await interaction.user.createDM();
 			}
+
+			const allTemplates = [
+				...templates.map(({ template }) => template), 
+				...state.templates.filter(
+					template => summaries.some(
+						summary => summary.displays(template)
+					)
+				),
+			];
+
+			const usedSpace = Array.from(new Set(allTemplates))
+				.map(template => template.space)
+				.reduce(sum, 0);
+			
+			if(usedSpace > SPACE_LIMIT) {
+				throw new Error(
+					"Memory limit reached — " +
+					"use smaller templates if possible " +
+					`(need ${usedSpace} bytes, limit is ${SPACE_LIMIT} bytes)`
+				);
+			} 
 			
 			const message = await interaction.fetchReply();
 			if(!(message instanceof Message)) {
@@ -400,6 +417,40 @@ export default new Map([
 
 				templates.push(template);
 			}
+
+			const summaries = state.summaries.filter(existingSummary => {
+				if(existingSummary === summary) {
+					// don't count the existing summary since it will be replaced
+					return false;
+				} 
+				
+				if(interaction.channel instanceof GuildChannel) {
+					return interaction.channel.guild === existingSummary.message.guild;
+				} else {
+					return existingSummary.message.channel === interaction.channel;
+				}
+			});
+
+			const allTemplates = [
+				...templates.map(({ template }) => template), 
+				...state.templates.filter(
+					template => summaries.some(
+						summary => summary.displays(template)
+					)
+				),
+			];
+
+			const usedSpace = Array.from(new Set(allTemplates))
+				.map(template => template.space)
+				.reduce(sum, 0);
+			
+			if(usedSpace > SPACE_LIMIT) {
+				throw new Error(
+					"Memory limit reached — " +
+					"use smaller templates if possible " +
+					`(need ${usedSpace} bytes, limit is ${SPACE_LIMIT} bytes)`
+				);
+			} 
 
 			await summary.modify(templates);
 
