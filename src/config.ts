@@ -21,7 +21,7 @@ type Limiter = {
 	limit: number;
 }
 
-const parseLimiter = (l: unknown) => {
+function parseLimiter(l: unknown) {
 	if(!is.object(l)) {
 		throw new Error("limit not an object");
 	}
@@ -43,7 +43,7 @@ const parseLimiter = (l: unknown) => {
 	}
 
 	return { interval, limit };
-};
+}
 
 type InteractionLimiter = {
 	user: Limiter[];
@@ -65,7 +65,9 @@ const location = path.resolve(__dirname, "..", "config.json");
 
 const config: unknown = JSON.parse(fs.readFileSync(location).toString());
 
-const error = (cause: string) => new Error(`Malformed config (${cause})`);
+function error(cause: string) {
+	return new Error(`Malformed config (${cause})`);
+}
 
 if(!is.object(config)) {
 	throw error("root not an object");

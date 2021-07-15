@@ -1,3 +1,7 @@
+import { promises as fs } from "fs";
+import { URL } from "url";
+import * as path from "path";
+
 import is = require("check-types");
 import { 
 	Constants, 
@@ -12,38 +16,43 @@ import {
 	CommandInteractionOption,
 	Message,
 	Collection,
-	MessageEmbed,
+	GuildChannel,
+	Channel,
+	MessageSelectMenu,
+	MessageActionRow,
+	DMChannel,
+	SelectMenuInteraction,
+	MessageInteraction,
+	Snowflake,
 } from "discord.js";
 
 const { ApplicationCommandOptionTypes } = Constants;
 
 import Summary from "./summary";
-import Server from "./server";
-import { zip } from "./util";
+import { StylizedTemplateDesign, TemplateDesign, TrackableTemplate, TrackedTemplate } from "./template";
+import { hashParams, parseIntOrDefault, sum, zip, humanTime } from "./util";
+import Pxls from "@blankparenthesis/pxlsspace";
+
+interface State {
+	designs: Map<string, TemplateDesign>;
+	templates: TrackableTemplate[];
+	summaries: Summary[];
+	pxls: Pxls;
+}
+
+type ExecuteFunction = (interaction: CommandInteraction, server: State) => Promise<void>;
 
 class Command {
-	readonly name: string;
-	readonly description: string;
-	readonly options: ApplicationCommandOptionData[];
-	private readonly executeFunction: (interaction: CommandInteraction, server: Server) => Promise<void>;
-	readonly defaultPermission?: boolean;
-
 	constructor(
-		name: string, 
-		description: string, 
-		options: ApplicationCommandOptionData[], 
-		execute: (interaction: CommandInteraction, server: Server) => Promise<void>, 
-		defaultPermission?: boolean,
-	) {
-		this.name = name;
-		this.description = description;
-		this.options = options;
-		this.executeFunction = execute;
-		this.defaultPermission = defaultPermission;
-	}
+		readonly name: string, 
+		readonly description: string, 
+		readonly options: ApplicationCommandOptionData[], 
+		private readonly executeFunction: ExecuteFunction, 
+		readonly defaultPermission?: boolean,
+	) {}
 
-	async execute(interaction: CommandInteraction, server: Server) {
-		await this.executeFunction(interaction, server);
+	async execute(interaction: CommandInteraction, state: State) {
+		await this.executeFunction(interaction, state);
 	}
 
 	async create(commandManager: ApplicationCommandManager | GuildApplicationCommandManager) {
@@ -98,7 +107,7 @@ class Command {
 				a.type === b.type || a.type === (Constants as any).ApplicationCommandOptionTypes[b.type],
 				a.name === b.name,
 				a.description === b.description,
-				a.required === b.required,
+				!a.required === !b.required,
 				Command.choicesAlike(a.choices, b.choices),
 				Command.optionsAlike(a.options, b.options),
 			];
@@ -120,12 +129,14 @@ class Command {
 
 const PRIVILEGED = [Permissions.FLAGS.MANAGE_GUILD, Permissions.FLAGS.ADMINISTRATOR];
 
-const memberIsMod = (member: GuildMember) => member.permissions.has(PRIVILEGED);
+function memberIsMod(member: GuildMember) {
+	return member.permissions.has(PRIVILEGED);
+}
 
 const NON_GUILD_MEMBER_RESPONSE = "Commands must be used by a server member";
 const LACKS_PERMISSIONS_RESPONSE = "“Manage Server” permission required";
 
-const requireStringOption = (command: CommandInteractionOption, index = 0) => {
+function requireStringOption(command: CommandInteractionOption, index = 0) {
 	if(is.undefined(command.options)) {
 		throw new Error("Internal Discord command malformed");
 	}
@@ -142,228 +153,408 @@ const requireStringOption = (command: CommandInteractionOption, index = 0) => {
 		throw new Error("Internal Discord command malformed");
 	}
 	return option;
-};
+}
 
-const parseTemplates = (input: string) => input.split(",").map(t => t.trim());
-const parseSummary = (input: string, server: Server) => {
-	let messageId = input;
-	if(!/^[0-9]+$/.test(messageId)) {
-		const match = messageId.match(/^https?:[/][/]discord[.]com[/]channels[/]([0-9]+)[/]([0-9]+)[/]([0-9]+)/);
+function getLinks(command: CommandInteractionOption, index = 0) {
+	if(is.undefined(command.options)) {
+		throw new Error("Internal Discord command malformed");
+	}
+	if(!(command.options instanceof Collection)) {
+		throw new Error("Internal Discord command format unknown");
+	}
+
+	const first = requireStringOption(command, index).trim();
+	const options = Array.from(command.options.values());
+	const rest = options.slice(index + 1)
+		.filter((option): option is typeof option & { value: string } => is.string(option.value))
+		.map(option => option.value.trim());
+
+	return [first, ...rest];
+}
+
+function parseMessageReference(input: string, channel: Channel) {
+	if(/^[0-9]+$/.test(input)) {
+		return input;
+	} else {
+		const match = input.match(/^https?:[/][/]discord[.]com[/]channels[/]([0-9]+)[/]([0-9]+)[/]([0-9]+)/);
 		if(match === null) {
 			throw new Error("Malformed message reference");
 		}
 
 		const [_, guild, _channel, message] = match;
 
-		if(server.id !== guild) {
-			throw new Error("Mismatched guild id in message reference");
+		if(channel instanceof GuildChannel) {
+			if(channel.guild.id !== guild) {
+				throw new Error("Mismatched guild id in message reference");
+			}
 		}
 
-		messageId = message;
+		return message;
+	}
+}
+// TODO: remove duplication with bot
+const DATA_DIR = path.resolve(__dirname, "..", "data");
+const DESIGN_FILE_EXTENSION = ".png";
+
+async function createTemplate(url: string, state: State) {
+	const { title, template, ox, oy, tw } = hashParams(url);
+
+	if(is.undefined(template)) {
+		throw new Error("Missing template source");
 	}
 
-	return server.findSummary(messageId);
-};
+	if(is.undefined(title) || title.trim() === "") {
+		throw new Error("Template requires a title");
+	}
+
+	const source = new URL(template);
+	const width = parseInt(tw) > 0 ? parseInt(tw) : undefined;
+
+	let design = (await StylizedTemplateDesign.download(
+		source,
+		width,
+		state.pxls.palette,
+	)).unstylize();
+
+	const { hash } = design;
+	if(state.designs.has(hash)) {
+		design = state.designs.get(hash) as TemplateDesign;
+	} else {
+		state.designs.set(hash, design);
+		await fs.mkdir(
+			path.resolve(DATA_DIR, "designs"),
+			{ "recursive": true },
+		);
+
+		await design.save(
+			path.resolve(DATA_DIR, "designs", `${hash}${DESIGN_FILE_EXTENSION}`),
+			state.pxls.palette,
+		);
+	}
+
+	let trackable = new TrackableTemplate(
+		state.pxls,
+		design,
+		parseIntOrDefault(ox, 0),
+		parseIntOrDefault(oy, 0),
+		Date.now(),
+	);
+
+	const existingTrackable = state.templates.find(t => t.equals(trackable));
+	if(!is.undefined(existingTrackable)) {
+		trackable = existingTrackable;
+	} else {
+		state.templates.push(trackable);
+	}
+
+	return new TrackedTemplate(trackable, title, source);
+}
+
+function TEMPLATE_LINK_OPTION(index: number, required = false) {
+	return {
+		"type": ApplicationCommandOptionTypes.STRING,
+		"name": `template-link-${index}`,
+		"description": "A template link.",
+		"required": required,
+	};
+}
+
+// 25 Megabytes
+const SPACE_LIMIT = 25 * 10 ** 6;
+const MAX_SUMMARIES = 10;
+
+function selectFromSummaries(summaries: Summary[]) {
+	return new MessageSelectMenu()
+		.addOptions(summaries.map(summary => ({
+			"label": `Summary ${summary.message.channel instanceof DMChannel
+				? "here"
+				: `in #${summary.message.channel.name.length > 13
+					? `${summary.message.channel.name.slice(0, 12)}…`
+					: summary.message.channel.name }`}`,
+			"description": `Posted ${
+				humanTime(Date.now() - summary.message.createdTimestamp).slice(0, 39)
+			} ago`,
+			"value": summary.message.id,
+		})));
+}
+
+// FIXME: memory leak (remove items after 15 minutes)
+const queuedParams = new Map<Snowflake, string[]>();
+
+async function editSummary(summaries: Summary[], editSummary: Summary, links: string[], state: State) {
+	const templates = [];
+
+	for(const link of links) {
+		const template = await createTemplate(link, state);
+
+		templates.push(template);
+	}
+
+	const allTemplates = [
+		...templates.map(({ template }) => template), 
+		...state.templates.filter(
+			template => summaries
+				// don't count the existing summary since it will be replaced
+				.filter(summary => summary !== editSummary)
+				.some(summary => summary.displays(template))
+		),
+	];
+
+	const usedSpace = Array.from(new Set(allTemplates))
+		.map(template => template.space)
+		.reduce(sum, 0);
+	
+	if(usedSpace > SPACE_LIMIT) {
+		throw new Error(
+			"Memory limit reached — " +
+			"use smaller templates if possible " +
+			`(need ${usedSpace} bytes, limit is ${SPACE_LIMIT} bytes)`
+		);
+	} 
+
+	await editSummary.modify(templates);
+
+	return templates;
+}
 
 export default new Map([
-	// TODO: template post {template_name}
-	new Command("template", "Manage templates tracked for this server.", [
-		{
-			"type": ApplicationCommandOptionTypes.SUB_COMMAND,
-			"name": "add",
-			"description": "Track a template.",
-			"options": [
-				{
-					"type": ApplicationCommandOptionTypes.STRING,
-					"name": "template-url",
-					"description": "A template url.",
-					"required": true,
-				},
-			],
-		},
-		{
-			"type": ApplicationCommandOptionTypes.SUB_COMMAND,
-			"name": "remove",
-			"description": "Stop tracking a template",
-			"options": [
-				{
-					"type": ApplicationCommandOptionTypes.STRING,
-					"name": "template-name",
-					"description": "A tracked template name.",
-					"required": true,
-				},
-			],
-		},
-		{
-			"type": ApplicationCommandOptionTypes.SUB_COMMAND,
-			"name": "list",
-			"description": "Show tracked templates.",
-		},
-	], async (interaction, server) => {
-		if(interaction.member === null) {
-			throw new Error(NON_GUILD_MEMBER_RESPONSE);
-		}
-		
-		if(!memberIsMod(interaction.member as GuildMember)) {
-			await interaction.reply({
-				"content": LACKS_PERMISSIONS_RESPONSE,
-				"ephemeral": true,
-			});
-			return;
-		}
+	// TODO: special summary entries for board buffers:
+	/*
 
-		const [subCommand] = interaction.options.values();
+	heatmap:
+	> **Activity**
+	> x pixels per minute
+	> y pixels per hour
+	> z pixels per day
+	
+	virginmap:
+	> **Original Pixels**
+	> p% remaining
+	> n of m pixels
+	> 
+	> -x pixels per minute
+	> -y pixels per hour
+	> -z pixels per day
 
-		if(subCommand.name === "add") {
-			await interaction.defer({
-				"ephemeral": true,
-			});
-			const url = requireStringOption(subCommand);
-			const { name, template } = await server.createTemplate(url);
-			await interaction.editReply(`Template “[${name}](${url})” added (${template.size} pixels).`);
-		} else if(subCommand.name === "remove") {
-			const search = requireStringOption(subCommand);
-			const { name } = await server.removeTemplate(search);
-			await interaction.reply({
-				"content": `Template “${name}” removed.`,
-				"ephemeral": true,
-			});
-		} else if(subCommand.name === "list") {
-			await interaction.defer({
-				"ephemeral": true,
-			});
+	initial: use initial board as template
 
-			const embed = new MessageEmbed();
-			embed.setTitle("Templates");
-			embed.setDescription(`Tracking ${server.templates.size} templates for this server:`);
-			embed.setColor([179, 0, 0]);
+	placemap?:
+	> Placeable pixels
+	> p% of canvas
+	> n of m pixels
 
-			for(const [name, template] of server.templates.entries()) {
-				// TODO: ensure list stays within Discord's embed count limit
-				embed.addField(name, `${template.size} pixels`);
-			}
-
-			await interaction.editReply({
-				"embeds": [embed],
-			});
-		} else {
-			throw new Error(`Unexpected subcommand “${subCommand.name}”`);
-		}
-	}),
+	*/
 	new Command("summary", "Manage summaries of template progress", [
 		{
 			"type": ApplicationCommandOptionTypes.SUB_COMMAND,
 			"name": "post",
-			"description": "Post a summary here. Summaries show the progress of templates every minute.",
-			"options": [
-				{
-					"type": ApplicationCommandOptionTypes.STRING,
-					"name": "template-names",
-					"description": "A list of template names. Separated by commas.",
-					"required": true,
-				},
-			],
+			"description": "Post a summary here.",
+			"options": Array(20)
+				.fill(null)
+				.map((_, i) => TEMPLATE_LINK_OPTION(i + 1, i === 0)),
 		},
 		{
 			"type": ApplicationCommandOptionTypes.SUB_COMMAND,
 			"name": "edit",
-			"description": "Change the templates shown in a summary.",
-			"options": [
-				{
-					"type": ApplicationCommandOptionTypes.STRING,
-					"name": "summary-message",
-					"description": "The ID of the summary message or a link to it.",
-					"required": true,
-				},
-				{
-					"type": ApplicationCommandOptionTypes.STRING,
-					"name": "template-names",
-					"description": "A list of template names. Separated by commas.",
-					"required": true,
-				},
-			],
+			"description": "Change the templates shown in a summary…",
+			"options": Array(20)
+				.fill(null)
+				.map((_, i) => TEMPLATE_LINK_OPTION(i + 1, i === 0)),
 		},
 		{
 			"type": ApplicationCommandOptionTypes.SUB_COMMAND,
 			"name": "freeze",
-			"description": "Stop updating a summary. This is not reversible.",
-			"options": [
-				{
-					"type": ApplicationCommandOptionTypes.STRING,
-					"name": "summary-message",
-					"description": "The ID of the summary message or a link to it.",
-					"required": true,
-				},
-			],
+			"description": "Permanently stop updating a summary…",
 		},
-	], async (interaction, server) => {
-		if(interaction.member === null) {
+	], async (interaction, state) => {
+		if(interaction.member !== null) {
+			if(!memberIsMod(interaction.member as GuildMember)) {
+				await interaction.reply({
+					"content": LACKS_PERMISSIONS_RESPONSE,
+					"ephemeral": true,
+				});
+				return;
+			}
+		} else if(interaction.channel instanceof GuildChannel) {
 			throw new Error(NON_GUILD_MEMBER_RESPONSE);
-		}
-
-		if(!memberIsMod(interaction.member as GuildMember)) {
-			await interaction.reply({
-				"content": LACKS_PERMISSIONS_RESPONSE,
-				"ephemeral": true,
-			});
-			return;
 		}
 
 		const [subCommand] = interaction.options.values();
 
+		const summaries = state.summaries.filter(summary => {
+			if(interaction.channel instanceof GuildChannel) {
+				return interaction.channel.guild === summary.message.guild;
+			} else {
+				return summary.message.channel === interaction.channel;
+			}
+		});
+
 		if(subCommand.name === "post") {
 			await interaction.defer();
 
-			const templatesInput = requireStringOption(subCommand);
-			const templates = parseTemplates(templatesInput);
+			if(summaries.length + 1 > MAX_SUMMARIES) {
+				throw new Error("Max summaries reached, freeze some before posting any more");
+			}
 
-			const embed = Summary.embed(server, templates);
+			const links = getLinks(subCommand);
+			const templates = [];
 
-			// TODO: check errors on addSummary before this (somehow)
-			await interaction.editReply({
-				"embeds": [embed],
-			});
+			for(const link of links) {
+				const template = await createTemplate(link, state);
+
+				templates.push(template);
+			}
+
+			if(is.null(interaction.guild)) {
+				await interaction.user.createDM();
+			}
+
+			const allTemplates = [
+				...templates.map(({ template }) => template), 
+				...state.templates.filter(
+					template => summaries.some(
+						summary => summary.displays(template)
+					)
+				),
+			];
+
+			const usedSpace = Array.from(new Set(allTemplates))
+				.map(template => template.space)
+				.reduce(sum, 0);
+			
+			if(usedSpace > SPACE_LIMIT) {
+				throw new Error(
+					"Memory limit reached — " +
+					"use smaller templates if possible " +
+					`(need ${usedSpace} bytes, limit is ${SPACE_LIMIT} bytes)`
+				);
+			} 
+			
 			const message = await interaction.fetchReply();
-
-			const castToMessage = (message: any): message is Message => message instanceof Message;
-
-			if(!castToMessage(message)) {
-				throw new Error("Internal assertion failed: reply message is of wrong type");
+			if(!(message instanceof Message)) {
+				throw new Error("Internal error — interaction in unknown channel");
 			}
 
-			await server.addSummary(message, templates);
+			const summary = new Summary(templates, message);
+
+			await interaction.editReply({
+				"embeds": [summary.embed()],
+			});
+
+			state.summaries.push(summary);
 		} else if(subCommand.name === "edit") {
-			const messageOption = requireStringOption(subCommand, 0);
-			const templatesOption = requireStringOption(subCommand, 1);
+			const links = getLinks(subCommand);
 
-			const summary = parseSummary(messageOption, server);
+			if(summaries.length === 0) {
+				throw new Error("No active summaries to edit");
+			} else if(summaries.length === 1) {
+				await interaction.defer({ "ephemeral": true });
 
-			if(!summary) {
-				throw new Error("Provided message is not an active summary");
+				const [summary] = summaries;
+				const templates = await editSummary(summaries, summary, links, state);
+				
+				await interaction.editReply({
+					"content": `Summary will now show ${templates.map(t => `“${t.inline}”`).join(", ")}.`,	
+				});
+			} else {
+				queuedParams.set(interaction.id, links);
+
+				await interaction.reply({
+					"content": "Select the summary to edit",
+					"components": [
+						new MessageActionRow()
+							.addComponents(selectFromSummaries(summaries)
+								.setCustomId(`edit ${interaction.id}`)
+							),
+					],
+					"ephemeral": true,
+				});
 			}
-
-			const templates = parseTemplates(templatesOption);
-
-			await summary.modify(templates);
-
-			await interaction.reply({
-				"content": `Summary will now show ${templates.map(t => `“${t}”`).join(", ")}.`,
-				"ephemeral": true,
-			});
 		} else if(subCommand.name === "freeze") {
-			const summaryId = requireStringOption(subCommand);
-			const summary = parseSummary(summaryId, server);
+			if(summaries.length === 0) {
+				throw new Error("No active summaries to freeze");
+			} else if(summaries.length === 1) {
+				await interaction.defer({ "ephemeral": true });
 
-			if(!summary) {
-				throw new Error("Provided message is not an active summary");
+				const [summary] = summaries;
+				await summary.finalize();
+				state.summaries.splice(state.summaries.indexOf(summary), 1);
+		
+				await interaction.editReply({
+					"content": "Summary will no longer update.",
+				});
+			} else {
+				await interaction.reply({
+					"content": "Select the summary to freeze",
+					"components": [
+						new MessageActionRow()
+							.addComponents(selectFromSummaries(summaries)
+								.setCustomId("freeze")
+							),
+					],
+					"ephemeral": true,
+				});
 			}
-
-			await server.dropSummary(summary);
-
-			interaction.reply({
-				"content": "Summary will no longer update.", 
-				"ephemeral": true,
-			});
 		}
 	}),
 ].map(c => [c.name, c]));
+
+// this flow being non-atomic is a little concerning — it requires non-trivial state
+// tracking which can cause all manner of issues.
+// One possible alternative is using guild-specific commands.
+// this would allow for permissions-level control as well as providing the available
+// options in the command itself. The cost would be losing DM support.
+export async function handleSelectCallback(interaction: SelectMenuInteraction, state: State) {
+	const summaries = state.summaries.filter(summary => {
+		if(interaction.channel instanceof GuildChannel) {
+			return interaction.channel.guild === summary.message.guild;
+		} else {
+			return summary.message.channel === interaction.channel;
+		}
+	});
+
+	if(interaction.customId.startsWith("edit")) {
+		await interaction.deferUpdate();
+		const [_, id] = interaction.customId.split(" ");
+
+		const links = queuedParams.get(id as Snowflake);
+
+		if(is.undefined(links)) {
+			console.debug(`Interaction ${interaction.id} had no queued params for ${id}`);
+			return;
+		}
+
+		queuedParams.delete(id as Snowflake);
+
+		const [summaryID] = interaction.values;
+		const summary = summaries.find(summary => summary.id === summaryID);
+
+		if(is.undefined(summary)) {
+			throw new Error("Summary no longer exists");
+		}
+
+		const templates = await editSummary(summaries, summary, links, state);
+
+		await interaction.editReply({
+			"content": `Summary will now show ${templates.map(t => `“${t.inline}”`).join(", ")}.`,
+			"components": [],
+		});
+	} else if(interaction.customId === "freeze") {
+		await interaction.deferUpdate();
+
+		const [summaryID] = interaction.values;
+		const summary = summaries.find(summary => summary.id === summaryID);
+
+		if(is.undefined(summary)) {
+			throw new Error("Summary no longer exists");
+		}
+
+		await summary.finalize();
+		state.summaries.splice(state.summaries.indexOf(summary), 1);
+
+		await interaction.editReply({
+			"content": "Summary will no longer update.",
+			"components": [],
+		});
+	}
+}

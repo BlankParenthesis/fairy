@@ -1,17 +1,19 @@
 import * as path from "path";
 import * as util from "util";
+import { promises as fs } from "fs";
 
-import { Client, Intents, Snowflake } from "discord.js";
+import { Client, Constants, DiscordAPIError, DMChannel, Guild, Intents, Message, Snowflake, TextChannel } from "discord.js";
 import * as chalk from "chalk";
 import { Pxls, BufferType } from "@blankparenthesis/pxlsspace";
 import is = require("check-types");
+import { URL } from "url";
 
-import ServerHandler from "./server";
 import Repl, { LogLevel } from "./repl";
-import commands from "./commands";
-import { Interval, hasProperty, humanTime } from "./util";
-
+import commands, { handleSelectCallback } from "./commands";
 import config from "./config";
+import { SavedTrackableTemplate, TemplateDesign, TrackableTemplate, TrackedTemplate } from "./template";
+import Summary, { SavedSummary } from "./summary";
+import { Interval, hasProperty, humanTime } from "./util";
 
 const replServer = new Repl(config.loglevel);
 
@@ -26,7 +28,7 @@ console.debug = (...s) => s.forEach(out => replServer.output(out, LogLevel.DEBUG
 
 console.log(chalk.white("🧚 Please wait..."));
 
-const fairy = new Client({ "intents": [
+const discord = new Client({ "intents": [
 	Intents.FLAGS.GUILDS,
 	Intents.FLAGS.GUILD_MEMBERS,
 ] });
@@ -34,13 +36,19 @@ const pxls = new Pxls({ "buffers": [BufferType.CANVAS, BufferType.PLACEMAP] });
 
 pxls.on("error", e => console.error("Pxls error: ", e));
 
-const SERVERS: Map<string, ServerHandler> = new Map();
-const init = async () => {
-	if(fairy.application === null) {
+const designs = new Map<string, TemplateDesign>();
+const templates = [] as TrackableTemplate[];
+const summaries = [] as Summary[];
+
+const DATA_DIR = path.resolve(__dirname, "..", "data");
+const DESIGN_FILE_EXTENSION = ".png";
+
+async function init() {
+	if(discord.application === null) {
 		throw new Error("https://www.youtube.com/watch?v=2-NRYjSpVAU");
 	}
 
-	const application = await fairy.application.fetch();
+	const application = await discord.application.fetch();
 	await application.commands.fetch();
 	await Promise.all(Array.from(commands.entries()).map(async ([name, command]) => {
 		const applicationCommand = application.commands.cache.find(c => c.name === name);
@@ -60,25 +68,116 @@ const init = async () => {
 	}));
 
 	try {
-		const servers = fairy.guilds.cache.map(guild => new ServerHandler(pxls, guild));
+		const designFiles = await fs.readdir(path.resolve(DATA_DIR, "designs"));
 
-		await Promise.all(servers.map(s => s.load()));
+		const designPromises = designFiles
+			.filter(filename => filename.endsWith(DESIGN_FILE_EXTENSION))
+			.map(filename => path.resolve(DATA_DIR, "designs", filename))
+			.map(filepath => TemplateDesign.load(filepath, pxls.palette));
 
-		for(const server of servers) {
-			SERVERS.set(server.id, server);
+		for(const design of await Promise.allSettled(designPromises)) {
+			if(design.status === "fulfilled") {
+				designs.set(design.value.hash, design.value);
+			} else {
+				console.warn("Failed to load template design:", design.reason);
+			}
+		}
+	} catch(e) {
+		console.debug("Failed to load template designs: ", e);
+	}
+
+	try {
+		const templatesFileBuffer = await fs.readFile(path.resolve(DATA_DIR, "templates.json"));
+		const templatesData = JSON.parse(templatesFileBuffer.toString("utf-8")) as unknown;
+
+		if(!is.array(templatesData)) {
+			throw new Error("expected templates root object to be array");
 		}
 
-		const templates = servers.reduce((sum, server) => sum + server.templates.size, 0);
-		console.info(`${chalk.blueBright(templates)} templates loaded`);
+		for(const template of templatesData as SavedTrackableTemplate[]) {
+			try {
+				const design = designs.get(template.design);
+
+				if(is.undefined(design)) {
+					throw new Error(`missing design “${template.design}”`);
+				}
+
+				templates.push(new TrackableTemplate(
+					pxls,
+					design,
+					template.x,
+					template.y,
+					template.started,
+					template.history,
+					template.progress,
+				));
+			} catch(e) {
+				console.warn("Failed to load template:", e);
+			}
+		}
 	} catch(e) {
-		console.error("Failed to load template:", e);
+		console.debug("Failed to load templates:", e);
 	}
-};
+
+	try {
+		const summariesFileBuffer = await fs.readFile(path.resolve(DATA_DIR, "summaries.json"));
+		const summariesData = JSON.parse(summariesFileBuffer.toString("utf-8")) as unknown;
+
+		if(!is.array(summariesData)) {
+			throw new Error("expected summaries root object to be array");
+		}
+
+		for(const summary of summariesData as SavedSummary[]) {
+			try {
+				const fields = summary.fields.map(field => {
+					const template = templates.find(template => {
+						const { x, y, design } = field.template;
+						return template.x === x
+							&& template.y === y
+							&& template.design.hash === design;
+					});
+
+					if(is.undefined(template)) {
+						console.warn(`missing template: ${util.inspect(field)}`);
+						return undefined;
+					}
+
+					return new TrackedTemplate(
+						template,
+						field.name,
+						is.undefined(field.source) ? undefined : new URL(field.source),
+					);
+				}).filter((template): template is Exclude<typeof template, undefined> => !is.undefined(template));
+
+				const channel = await discord.channels.fetch(summary.channel);
+
+				if(is.null(channel)) {
+					throw new Error("channel was null");
+				}
+
+				if(!(channel instanceof TextChannel) && !(channel instanceof DMChannel)) {
+					throw new Error("channel does not support messages");
+				}
+
+				const message = await channel.messages.fetch(summary.message);
+
+				summaries.push(new Summary(
+					fields,
+					message,
+				));
+			} catch(e) {
+				console.warn("Failed to load summary:", e);
+			}
+		}
+	} catch(e) {
+		console.debug("Failed to load summaries:", e);
+	}
+}
 
 let first = true;
 let discordUp = false;
 let pxlsUp = false;
-const set = (d: boolean, p: boolean) => {
+function set(d: boolean, p: boolean) {
 	const bad = (!d || !p) && discordUp && pxlsUp;
 
 	if(d !== discordUp) {
@@ -111,32 +210,18 @@ const set = (d: boolean, p: boolean) => {
 	} else if(bad) {
 		console.log("😣 We're down");
 	}
-};
+}
 
-fairy.on("ready", () => set(true, pxlsUp));
-fairy.on("disconnect", () => set(false, pxlsUp));
-fairy.on("error", () => set(false, pxlsUp));
+discord.on("ready", () => set(true, pxlsUp));
+discord.on("disconnect", () => set(false, pxlsUp));
+discord.on("error", () => set(false, pxlsUp));
 if(!hasProperty(config, "token")) {
 	throw new Error("Missing bot token in config");
 }
 if(!is.string(config.token)) {
 	throw new Error("Invalid bot token in config");
 }
-fairy.login(config.token);
-
-fairy.on("guildCreate", guild => {
-	const server = new ServerHandler(pxls, guild);
-	SERVERS.set(guild.id, server);
-	return server.load();
-});
-
-fairy.on("guildDelete", guild => {
-	const server = SERVERS.get(guild.id);
-	if(server) {
-		SERVERS.delete(guild.id);
-		return server.save();
-	}
-});
+discord.login(config.token);
 
 class Limiter<T> {
 	private storedUses: Map<T, number> = new Map();
@@ -192,7 +277,7 @@ const serverLimiters: Limiter<Snowflake>[] = config.interaction.limiter.server.m
 	new Limiter(l.limit, l.interval)
 );
 
-fairy.on("interaction", async interaction => {
+discord.on("interactionCreate", async interaction => {
 	if(interaction.isCommand()) {
 		const command = commands.get(interaction.commandName);
 		if(!is.undefined(command)) {
@@ -213,12 +298,10 @@ fairy.on("interaction", async interaction => {
 
 			userLimiters.forEach(l => l.use(userId));
 
-			if(interaction.guildID) {
-				const guildId = interaction.guildID;
-
-				const server = SERVERS.get(guildId);
-
-				const limitedServerLimiter = serverLimiters.find(l => !l.canUse(guildId));
+			if(!is.null(interaction.guild)) {
+				const limitedServerLimiter = serverLimiters.find(
+					limiter => !limiter.canUse((interaction.guild as Guild).id as Snowflake)
+				);
 
 				if(!is.undefined(limitedServerLimiter)) {
 					const readableCooldown = humanTime(limitedServerLimiter.timeUntilRefresh);
@@ -230,33 +313,39 @@ fairy.on("interaction", async interaction => {
 					});
 					return;
 				}
-
-				try {
-					if(server) {
-						await command.execute(interaction, server);
-	
-						serverLimiters.forEach(l => l.use(guildId));
-					} else {
-						throw new Error("Interaction in unknown server");
-					}
-				} catch(e) {
-					const errorResponse = `Problem: ${e.message}.`;
-
-					console.debug(e);
-
-					if(interaction.replied || interaction.deferred) {
-						await interaction.editReply(errorResponse);
-					} else {
-						await interaction.reply({
-							"content": errorResponse,
-							"ephemeral": true,
-						});
-					}
-				}
-			} else {
-				// TODO: support DMs
-				interaction.reply("DMs are not supported at this time.");
 			}
+
+			try {
+				await command.execute(interaction, { designs, templates, summaries, pxls });
+
+				if(!is.null(interaction.guild)) {
+					serverLimiters.forEach(
+						limiter => limiter.use((interaction.guild as Guild).id as Snowflake));
+				}
+			} catch(e) {
+				const errorResponse = `Problem: ${e.message}.`;
+
+				console.debug(e);
+
+				if(interaction.replied || interaction.deferred) {
+					await interaction.editReply(errorResponse);
+				} else {
+					await interaction.reply({
+						"content": errorResponse,
+						"ephemeral": true,
+					});
+				}
+			}
+		}
+	} else if(interaction.isSelectMenu()) {
+		try {
+			await handleSelectCallback(interaction, { designs, templates, summaries, pxls });
+		} catch(e) {
+			console.debug(e);
+			await interaction.update({
+				"content": `Problem: ${e.message}.`,
+				"components": [],
+			});
 		}
 	}
 });
@@ -265,42 +354,108 @@ pxls.on("ready", () => set(discordUp, true));
 pxls.on("disconnect", () => set(discordUp, false));
 pxls.connect();
 
-pxls.on("pixel", p => {
-	const { x, y, color, oldColor } = p;
-	for(const server of SERVERS.values()) {
-		server.pixel(x, y, color, oldColor);
+pxls.on("pixel", pixel => {
+	if(is.undefined(pixel.oldColor)) {
+		console.warn("Missing old color data for pixel: ", pixel);
+	} else {
+		for(const template of templates) {
+			const x = pixel.x - template.x;
+			const y = pixel.y - template.x;
+
+			if(x > 0 && x < template.width && y > 0 && y < template.height) { 
+				const i = y * template.width + x;
+				template.sync(new Map([[i, pixel as Required<typeof pixel>]]));
+			}
+		}
 	}
 });
 
-const update = async () => {
-	try {
-		if(!pxlsUp) {
-			return;
-		}
-		await Promise.all(Array.from(SERVERS.values()).map((server) => server.updateSummaries()));
-	} catch(e) {
-		console.error("Couldn't update all summaries:", e);
+async function pruneUnused() {
+	// TODO: require that items go unused for two cycles before pruning
+	const unusedTemplates = templates.filter(
+		template => !summaries.some(
+			summary => summary.displays(template)
+		)
+	);
+	for(const template of unusedTemplates) {
+		console.debug("Dropping template which is no longer used anywhere");
+		templates.splice(templates.indexOf(template), 1);
 	}
-};
+
+	for(const hash of designs.keys()) {
+		if(!templates.some(template => template.design.hash === hash)) {
+			console.debug("Dropping design which is no longer used anywhere");
+			designs.delete(hash);
+		}
+	}
+
+	try {
+		const files = (await fs.readdir(path.resolve(DATA_DIR, "designs")))
+			.filter(filename => filename.endsWith(DESIGN_FILE_EXTENSION));
+		const strayFiles = files.filter(file => !designs.has(file.slice(0, -DESIGN_FILE_EXTENSION.length)));
+		const deletions = strayFiles.map(file => path.resolve(DATA_DIR, "designs", file))
+			.map(path => fs.unlink(path));
+
+		// FIXME: if we add a new design while awaiting here, it will immediately be deleted,
+		// causing a file not found error on next startup. Timing problems like this are hard to fix…
+		for(const deletion of await Promise.allSettled(deletions)) {
+			if(deletion.status === "rejected") {
+				console.warn("Failed to delete template design:", deletion.reason);
+			}
+		}
+	} catch(e) {
+		console.debug("Failed to prune design files: ", e);
+	}
+}
+setInterval(pruneUnused, 15 * Interval.MINUTE);
+
+async function update() {
+	if(pxlsUp) {
+		const promises = summaries.map(summary => summary.update());
+		const failures = (await Promise.allSettled(promises))
+			.map((status, i) => ({ status, "summary": summaries[i] }))
+			.filter((result): result is typeof result & {
+				status: PromiseRejectedResult;
+			} => result.status.status === "rejected");
+
+		for(const { status, summary } of failures) {
+			if(status.reason instanceof DiscordAPIError && [
+				Constants.APIErrors.UNKNOWN_GUILD,
+				Constants.APIErrors.UNKNOWN_CHANNEL, 
+				Constants.APIErrors.UNKNOWN_MESSAGE, 
+			].includes(status.reason.code as any)) {
+				console.debug(`Dropping summary whose message seems deleted or unreachable: ${status.reason.message}`);
+				summaries.splice(summaries.indexOf(summary), 1);
+			} else {
+				console.warn("Failed to update summary: ", status.reason);
+			}
+		}
+	}
+}
 
 const msUntilMinuteEpoch = (60 - (new Date()).getSeconds()) * 1000;
 setTimeout(
 	() => {
-		setInterval(update, 60 * Interval.SECOND);
+		setInterval(update, Interval.MINUTE);
 		update();
 	},
 	msUntilMinuteEpoch + 3 * Interval.SECOND
 );
 
 replServer.on("setupContext", context => {
-	context.fairy = fairy;
+	context.discord = discord;
 	context.pxls = pxls;
 	context.update = update;
-	context.servers = SERVERS;
+	context.pruneUnused = pruneUnused;
+	context.designs = designs;
+	context.templates = templates;
+	context.summaries = summaries;
 	context.commands = commands;
 });
 
 replServer.on("exit", async () => {
-	await Promise.all(Array.from(SERVERS.values()).map((server) => server.save()));
+	await fs.writeFile(path.resolve(DATA_DIR, "summaries.json"), JSON.stringify(summaries));
+	await fs.writeFile(path.resolve(DATA_DIR, "templates.json"), JSON.stringify(templates));
+
 	process.exit();
 });
