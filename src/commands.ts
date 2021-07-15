@@ -18,13 +18,19 @@ import {
 	Collection,
 	GuildChannel,
 	Channel,
+	MessageSelectMenu,
+	MessageActionRow,
+	DMChannel,
+	SelectMenuInteraction,
+	MessageInteraction,
+	Snowflake,
 } from "discord.js";
 
 const { ApplicationCommandOptionTypes } = Constants;
 
 import Summary from "./summary";
 import { StylizedTemplateDesign, TemplateDesign, TrackableTemplate, TrackedTemplate } from "./template";
-import { hashParams, parseIntOrDefault, sum, zip } from "./util";
+import { hashParams, parseIntOrDefault, sum, zip, humanTime } from "./util";
 import Pxls from "@blankparenthesis/pxlsspace";
 
 interface State {
@@ -257,6 +263,60 @@ function TEMPLATE_LINK_OPTION(index: number, required = false) {
 const SPACE_LIMIT = 25 * 10 ** 6;
 const MAX_SUMMARIES = 10;
 
+function selectFromSummaries(summaries: Summary[]) {
+	return new MessageSelectMenu()
+		.addOptions(summaries.map(summary => ({
+			"label": `Summary ${summary.message.channel instanceof DMChannel
+				? "here"
+				: `in #${summary.message.channel.name.length > 13
+					? `${summary.message.channel.name.slice(0, 12)}…`
+					: summary.message.channel.name }`}`,
+			"description": `Posted ${
+				humanTime(Date.now() - summary.message.createdTimestamp).slice(0, 39)
+			} ago`,
+			"value": summary.message.id,
+		})));
+}
+
+// FIXME: memory leak (remove items after 15 minutes)
+const queuedParams = new Map<Snowflake, string[]>();
+
+async function editSummary(summaries: Summary[], editSummary: Summary, links: string[], state: State) {
+	const templates = [];
+
+	for(const link of links) {
+		const template = await createTemplate(link, state);
+
+		templates.push(template);
+	}
+
+	const allTemplates = [
+		...templates.map(({ template }) => template), 
+		...state.templates.filter(
+			template => summaries
+				// don't count the existing summary since it will be replaced
+				.filter(summary => summary !== editSummary)
+				.some(summary => summary.displays(template))
+		),
+	];
+
+	const usedSpace = Array.from(new Set(allTemplates))
+		.map(template => template.space)
+		.reduce(sum, 0);
+	
+	if(usedSpace > SPACE_LIMIT) {
+		throw new Error(
+			"Memory limit reached — " +
+			"use smaller templates if possible " +
+			`(need ${usedSpace} bytes, limit is ${SPACE_LIMIT} bytes)`
+		);
+	} 
+
+	await editSummary.modify(templates);
+
+	return templates;
+}
+
 export default new Map([
 	// TODO: special summary entries for board buffers:
 	/*
@@ -288,37 +348,23 @@ export default new Map([
 		{
 			"type": ApplicationCommandOptionTypes.SUB_COMMAND,
 			"name": "post",
-			"description": "Post a summary here. Summaries show the progress of templates every minute.",
-			"options": Array(20).fill(null).map((_, i) => TEMPLATE_LINK_OPTION(i + 1, i === 0)),
+			"description": "Post a summary here.",
+			"options": Array(20)
+				.fill(null)
+				.map((_, i) => TEMPLATE_LINK_OPTION(i + 1, i === 0)),
 		},
 		{
 			"type": ApplicationCommandOptionTypes.SUB_COMMAND,
 			"name": "edit",
-			"description": "Change the templates shown in a summary.",
-			"options": [
-				// TODO: use a message component select list for determining the summary
-				{
-					"type": ApplicationCommandOptionTypes.STRING,
-					"name": "summary-message",
-					"description": "The ID of the summary message or a link to it.",
-					"required": true,
-				},
-				...Array(20).fill(null).map((_, i) => TEMPLATE_LINK_OPTION(i + 1, i === 0)),
-			],
+			"description": "Change the templates shown in a summary…",
+			"options": Array(20)
+				.fill(null)
+				.map((_, i) => TEMPLATE_LINK_OPTION(i + 1, i === 0)),
 		},
 		{
 			"type": ApplicationCommandOptionTypes.SUB_COMMAND,
 			"name": "freeze",
-			"description": "Stop updating a summary. This is not reversible.",
-			"options": [
-				// TODO: use a message component select list for determining the summary
-				{
-					"type": ApplicationCommandOptionTypes.STRING,
-					"name": "summary-message",
-					"description": "The ID of the summary message or a link to it.",
-					"required": true,
-				},
-			],
+			"description": "Permanently stop updating a summary…",
 		},
 	], async (interaction, state) => {
 		if(interaction.member !== null) {
@@ -335,16 +381,16 @@ export default new Map([
 
 		const [subCommand] = interaction.options.values();
 
+		const summaries = state.summaries.filter(summary => {
+			if(interaction.channel instanceof GuildChannel) {
+				return interaction.channel.guild === summary.message.guild;
+			} else {
+				return summary.message.channel === interaction.channel;
+			}
+		});
+
 		if(subCommand.name === "post") {
 			await interaction.defer();
-
-			const summaries = state.summaries.filter(summary => {
-				if(interaction.channel instanceof GuildChannel) {
-					return interaction.channel.guild === summary.message.guild;
-				} else {
-					return summary.message.channel === interaction.channel;
-				}
-			});
 
 			if(summaries.length + 1 > MAX_SUMMARIES) {
 				throw new Error("Max summaries reached, freeze some before posting any more");
@@ -397,84 +443,118 @@ export default new Map([
 
 			state.summaries.push(summary);
 		} else if(subCommand.name === "edit") {
-			await interaction.defer({ "ephemeral": true });
+			const links = getLinks(subCommand);
 
-			const messageOption = requireStringOption(subCommand, 0);
-			const links = getLinks(subCommand, 1);
+			if(summaries.length === 0) {
+				throw new Error("No active summaries to edit");
+			} else if(summaries.length === 1) {
+				await interaction.defer({ "ephemeral": true });
 
-			const messageID = parseMessageReference(messageOption, interaction.channel as Channel);
-
-			const summary = state.summaries.find(summary => summary.id === messageID);
-
-			if(is.undefined(summary)) {
-				throw new Error("Provided message is not an active summary");
-			}
-
-			const templates = [];
-
-			for(const link of links) {
-				const template = await createTemplate(link, state);
-
-				templates.push(template);
-			}
-
-			const summaries = state.summaries.filter(existingSummary => {
-				if(existingSummary === summary) {
-					// don't count the existing summary since it will be replaced
-					return false;
-				} 
+				const [summary] = summaries;
+				const templates = await editSummary(summaries, summary, links, state);
 				
-				if(interaction.channel instanceof GuildChannel) {
-					return interaction.channel.guild === existingSummary.message.guild;
-				} else {
-					return existingSummary.message.channel === interaction.channel;
-				}
-			});
+				await interaction.editReply({
+					"content": `Summary will now show ${templates.map(t => `“${t.inline}”`).join(", ")}.`,	
+				});
+			} else {
+				queuedParams.set(interaction.id, links);
 
-			const allTemplates = [
-				...templates.map(({ template }) => template), 
-				...state.templates.filter(
-					template => summaries.some(
-						summary => summary.displays(template)
-					)
-				),
-			];
-
-			const usedSpace = Array.from(new Set(allTemplates))
-				.map(template => template.space)
-				.reduce(sum, 0);
-			
-			if(usedSpace > SPACE_LIMIT) {
-				throw new Error(
-					"Memory limit reached — " +
-					"use smaller templates if possible " +
-					`(need ${usedSpace} bytes, limit is ${SPACE_LIMIT} bytes)`
-				);
-			} 
-
-			await summary.modify(templates);
-
-			await interaction.editReply({
-				"content": `Summary will now show ${templates.map(t => `“${t.inline}”`).join(", ")}.`,
-			});
-		} else if(subCommand.name === "freeze") {
-			await interaction.defer({ "ephemeral": true });
-
-			const summaryId = requireStringOption(subCommand);
-			const messageID = parseMessageReference(summaryId, interaction.channel as Channel);
-			const summary = state.summaries.find(summary => summary.id === messageID);
-
-			if(!summary) {
-				throw new Error("Provided message is not an active summary");
+				await interaction.reply({
+					"content": "Select the summary to edit",
+					"components": [
+						new MessageActionRow()
+							.addComponents(selectFromSummaries(summaries)
+								.setCustomId(`edit ${interaction.id}`)
+							),
+					],
+					"ephemeral": true,
+				});
 			}
+		} else if(subCommand.name === "freeze") {
+			if(summaries.length === 0) {
+				throw new Error("No active summaries to freeze");
+			} else if(summaries.length === 1) {
+				await interaction.defer({ "ephemeral": true });
 
-			await summary.finalize();
-
-			state.summaries.splice(state.summaries.indexOf(summary), 1);
-
-			interaction.editReply({
-				"content": "Summary will no longer update.", 
-			});
+				const [summary] = summaries;
+				await summary.finalize();
+				state.summaries.splice(state.summaries.indexOf(summary), 1);
+		
+				await interaction.editReply({
+					"content": "Summary will no longer update.",
+				});
+			} else {
+				await interaction.reply({
+					"content": "Select the summary to freeze",
+					"components": [
+						new MessageActionRow()
+							.addComponents(selectFromSummaries(summaries)
+								.setCustomId("freeze")
+							),
+					],
+					"ephemeral": true,
+				});
+			}
 		}
 	}),
 ].map(c => [c.name, c]));
+
+// this flow being non-atomic is a little concerning — it requires non-trivial state
+// tracking which can cause all manner of issues.
+// One possible alternative is using guild-specific commands.
+// this would allow for permissions-level control as well as providing the available
+// options in the command itself. The cost would be losing DM support.
+export async function handleSelectCallback(interaction: SelectMenuInteraction, state: State) {
+	const summaries = state.summaries.filter(summary => {
+		if(interaction.channel instanceof GuildChannel) {
+			return interaction.channel.guild === summary.message.guild;
+		} else {
+			return summary.message.channel === interaction.channel;
+		}
+	});
+
+	if(interaction.customId.startsWith("edit")) {
+		await interaction.deferUpdate();
+		const [_, id] = interaction.customId.split(" ");
+
+		const links = queuedParams.get(id as Snowflake);
+
+		if(is.undefined(links)) {
+			console.debug(`Interaction ${interaction.id} had no queued params for ${id}`);
+			return;
+		}
+
+		queuedParams.delete(id as Snowflake);
+
+		const [summaryID] = interaction.values;
+		const summary = summaries.find(summary => summary.id === summaryID);
+
+		if(is.undefined(summary)) {
+			throw new Error("Summary no longer exists");
+		}
+
+		const templates = await editSummary(summaries, summary, links, state);
+
+		await interaction.editReply({
+			"content": `Summary will now show ${templates.map(t => `“${t.inline}”`).join(", ")}.`,
+			"components": [],
+		});
+	} else if(interaction.customId === "freeze") {
+		await interaction.deferUpdate();
+
+		const [summaryID] = interaction.values;
+		const summary = summaries.find(summary => summary.id === summaryID);
+
+		if(is.undefined(summary)) {
+			throw new Error("Summary no longer exists");
+		}
+
+		await summary.finalize();
+		state.summaries.splice(state.summaries.indexOf(summary), 1);
+
+		await interaction.editReply({
+			"content": "Summary will no longer update.",
+			"components": [],
+		});
+	}
+}

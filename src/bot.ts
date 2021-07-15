@@ -2,14 +2,14 @@ import * as path from "path";
 import * as util from "util";
 import { promises as fs } from "fs";
 
-import { Client, Constants, DiscordAPIError, DMChannel, Guild, Intents, Snowflake, TextChannel } from "discord.js";
+import { Client, Constants, DiscordAPIError, DMChannel, Guild, Intents, Message, Snowflake, TextChannel } from "discord.js";
 import * as chalk from "chalk";
 import { Pxls, BufferType } from "@blankparenthesis/pxlsspace";
 import is = require("check-types");
 import { URL } from "url";
 
 import Repl, { LogLevel } from "./repl";
-import commands from "./commands";
+import commands, { handleSelectCallback } from "./commands";
 import config from "./config";
 import { SavedTrackableTemplate, TemplateDesign, TrackableTemplate, TrackedTemplate } from "./template";
 import Summary, { SavedSummary } from "./summary";
@@ -336,6 +336,16 @@ discord.on("interactionCreate", async interaction => {
 					});
 				}
 			}
+		}
+	} else if(interaction.isSelectMenu()) {
+		try {
+			await handleSelectCallback(interaction, { designs, templates, summaries, pxls });
+		} catch(e) {
+			console.debug(e);
+			await interaction.update({
+				"content": `Problem: ${e.message}.`,
+				"components": [],
+			});
 		}
 	}
 });
