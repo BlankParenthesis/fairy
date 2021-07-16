@@ -22,15 +22,15 @@ import {
 	MessageActionRow,
 	DMChannel,
 	SelectMenuInteraction,
-	MessageInteraction,
 	Snowflake,
 } from "discord.js";
+import ExpiryMap from "expiry-map";
 
 const { ApplicationCommandOptionTypes } = Constants;
 
 import Summary from "./summary";
 import { StylizedTemplateDesign, TemplateDesign, TrackableTemplate, TrackedTemplate } from "./template";
-import { hashParams, parseIntOrDefault, sum, zip, humanTime } from "./util";
+import { hashParams, parseIntOrDefault, sum, zip, humanTime, Interval } from "./util";
 import Pxls from "@blankparenthesis/pxlsspace";
 
 interface State {
@@ -278,8 +278,7 @@ function selectFromSummaries(summaries: Summary[]) {
 		})));
 }
 
-// FIXME: memory leak (remove items after 15 minutes)
-const queuedParams = new Map<Snowflake, string[]>();
+const queuedParams = new ExpiryMap<Snowflake, string[]>(Interval.MINUTE * 15);
 
 async function editSummary(summaries: Summary[], editSummary: Summary, links: string[], state: State) {
 	const templates = [];
