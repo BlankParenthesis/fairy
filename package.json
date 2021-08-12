@@ -1,6 +1,6 @@
 {
 	"name": "fairy",
-	"version": "2.0.1",
+	"version": "2.1.1",
 	"description": "A pxls.space template tracking bot for Discord",
 	"keywords": [
 		"pxls",
@@ -31,14 +31,14 @@
 	"scripts": {
 		"start": "node lib/bot.js",
 		"lint": "eslint src/**/* ; exit 0",
-		"build": "tsc ; npx napi build --release ; strip *.node"
+		"build": "tsc"
 	},
 	"repository": {
 		"type": "git",
 		"url": "https://gitlab.com/nbsp_nbsp/fairy"
 	},
 	"dependencies": {
-		"@blankparenthesis/pxlsspace": "^2.7.0",
+		"@blankparenthesis/pxlsspace": "^2.8.0",
 		"bufferutil": "^4.0.0",
 		"chalk": "^4.0.0",
 		"check-types": "^11.1.2",
@@ -54,7 +54,6 @@
 		"zlib-sync": "^0.1.0"
 	},
 	"devDependencies": {
-		"@napi-rs/cli": "^1.1.0",
 		"@types/check-types": "^7.3.2",
 		"@types/node-fetch": "^2.5.10",
 		"@types/sharp": "^0.28.3",
@@ -65,8 +64,5 @@
 	"engines": {
 		"node": ">=14.0.0"
 	},
-	"private": true,
-	"napi": {
-		"name": "native"
-	}
+	"private": true
 }

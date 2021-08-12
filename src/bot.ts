@@ -4,14 +4,14 @@ import { promises as fs } from "fs";
 
 import { Client, Constants, DiscordAPIError, DMChannel, Guild, Intents, Message, Snowflake, TextChannel } from "discord.js";
 import * as chalk from "chalk";
-import { Pxls, BufferType } from "@blankparenthesis/pxlsspace";
+import { Pxls, BufferType, TemplateDesign } from "@blankparenthesis/pxlsspace";
 import is = require("check-types");
 import { URL } from "url";
 
 import Repl, { LogLevel } from "./repl";
 import commands, { handleSelectCallback } from "./commands";
 import config from "./config";
-import { SavedTrackableTemplate, TemplateDesign, TrackableTemplate, TrackedTemplate } from "./template";
+import { SavedTrackableTemplate, TrackableTemplate, TrackedTemplate } from "./template";
 import Summary, { SavedSummary } from "./summary";
 import { Interval, hasProperty, humanTime } from "./util";
 
@@ -73,7 +73,7 @@ async function init() {
 		const designPromises = designFiles
 			.filter(filename => filename.endsWith(DESIGN_FILE_EXTENSION))
 			.map(filename => path.resolve(DATA_DIR, "designs", filename))
-			.map(filepath => TemplateDesign.load(filepath, pxls.palette));
+			.map(filepath => TemplateDesign.fromFile(filepath, pxls.palette));
 
 		for(const design of await Promise.allSettled(designPromises)) {
 			if(design.status === "fulfilled") {
@@ -360,10 +360,10 @@ pxls.on("pixel", pixel => {
 	} else {
 		for(const template of templates) {
 			const x = pixel.x - template.x;
-			const y = pixel.y - template.x;
+			const y = pixel.y - template.y;
 
 			if(x > 0 && x < template.width && y > 0 && y < template.height) { 
-				const i = y * template.width + x;
+				const i = template.design.positionToIndex(x, y);
 				template.sync(new Map([[i, pixel as Required<typeof pixel>]]));
 			}
 		}

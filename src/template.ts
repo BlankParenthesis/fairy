@@ -1,268 +1,22 @@
 import { URL } from "url";
-import * as crypto from "crypto";
 
-import sharp = require("sharp");
 import is = require("check-types");
 
-import { Pxls, TRANSPARENT_PIXEL, PxlsColor, Pixel } from "@blankparenthesis/pxlsspace";
+import { 
+	Pxls, 
+	TRANSPARENT_PIXEL, 
+	PxlsColor, 
+	Pixel, 
+	Template, 
+	TemplateDesign, 
+	Buffer2D,
+} from "@blankparenthesis/pxlsspace";
 
 import Histoire from "./history";
 import { Interval, humanTime, SaveableAs } from "./util";
 import Cache from "./cache";
-import { downloadImage } from "./download";
 
-import { multiply, add, diff, mask, index, unstylize } from "../native";
 import { Summarizable } from "./summary";
-
-enum IndexMethod {
-	EXACT,
-}
-
-class IndexedArray extends Uint8Array {
-	deindex(palette: PxlsColor[]) {
-		return Pxls.convertBufferToRGBA(this, palette);
-	}
-
-	static index(
-		rgba: Uint8Array, 
-		palette: PxlsColor[], 
-		method: IndexMethod | ((pixel: Uint8Array) => number) = IndexMethod.EXACT
-	) {
-		if(is.function(method)) {
-			const buffer = new IndexedArray(rgba.length / 4);
-
-			for(let i = 0; i < buffer.length; i++) {
-				const start = i * 4;
-				buffer[i] = method(rgba.subarray(start, start + 4));
-			}
-
-			return buffer;
-		} else {
-			switch(method) {
-			case IndexMethod.EXACT:
-				return new IndexedArray(index(rgba, palette));
-			default:
-				throw new Error(`Unimplemented indexing method ${method}`);
-			}
-		}
-	}
-
-	equals(other: IndexedArray) {
-		return this.length === other.length
-			&& diff(this, other).length === 0;
-	}
-}
-
-export class TemplateDesign {
-	readonly size: number;
-
-	constructor(
-		public readonly width: number,
-		public readonly height: number,
-		public readonly data: IndexedArray,
-	) {
-		if(width * height !== data.length) {
-			throw new Error("Template dimensions do not match data length");
-		}
-
-		// Size is all non-transparent pixels.
-		// In other words: the number of differences between the data and
-		// a buffer of only transparent pixels.
-		this.size = diff(
-			this.data,
-			new Uint8Array(this.data.length).fill(TRANSPARENT_PIXEL),
-		).length;
-	}
-
-	read(iOrX: number, y?: number) {
-		let i = iOrX;
-
-		if(!is.undefined(y)) {
-			i = y * this.width + iOrX;
-		}
-
-		return {
-			"x": i % this.width, 
-			"y": Math.floor(i / this.width),
-			"color": this.data[i],
-		};
-	}
-
-	get hash() {
-		return crypto.createHash("sha256")
-			.update(this.data)
-			.digest("hex");
-	}
-
-	async save(file: string, palette: PxlsColor[]) {
-		await sharp(Buffer.from(this.data.deindex(palette)), { "raw": {
-			"width": this.width,
-			"height": this.height,
-			"channels": 4,
-		} }).toFile(file);
-	}
-	
-	static async load(file: string, palette: PxlsColor[]) {
-		const image = sharp(file).raw();
-
-		const { width, height } = await image.metadata();
-
-		if(is.undefined(width)) {
-			throw new Error("Image defines no width");
-		}
-		if(is.undefined(height)) {
-			throw new Error("Image defines no height");
-		}
-
-		const buffer = IndexedArray.index(
-			await image.toBuffer(),
-			palette,
-		);
-
-		return new TemplateDesign(width, height, buffer);
-	}
-
-	// TODO: stylize()
-
-	equals(other: TemplateDesign) {
-		return this.width === other.width
-			&& this.height === other.height
-			&& this.data === other.data;
-	}
-}
-
-export class StylizedTemplateDesign {
-	constructor(
-		public readonly designWidth: number,
-		public readonly designHeight: number,
-		public readonly styleWidth: number,
-		public readonly styleHeight: number,
-		private readonly data: IndexedArray,
-	) {
-		if(styleWidth !== Math.round(styleWidth)) {
-			throw new Error("Invalid style width for deisgn");
-		}
-
-		if(styleHeight !== Math.round(styleHeight)) {
-			throw new Error("Invalid style height for design");
-		}
-
-		const expectedLength = designWidth * designHeight * styleWidth * styleHeight;
-		if(expectedLength !== data.length) {
-			throw new Error("Template dimensions do not match data length");
-		}
-	}
-
-	unstylize(): TemplateDesign {
-		let data;
-		if(this.styleWidth === 1 && this.styleHeight === 1) {
-			data = this.data;
-		} else {
-			data = new IndexedArray(unstylize(
-				this.data,
-				this.designWidth * this.styleWidth,
-				this.designHeight * this.styleHeight,
-				this.styleWidth,
-				this.styleHeight,
-			));
-		}
-
-		return new TemplateDesign(
-			this.designWidth,
-			this.designHeight,
-			data,
-		);
-	}
-
-	static async download(source: URL, width: number | undefined, palette: PxlsColor[]) {
-		const image = await downloadImage(source);
-
-		const designWidth = is.undefined(width) ? image.width : width;
-		const designHeight = designWidth / image.width * image.height;
-
-		const styleWidth = image.width / designWidth;
-		const styleHeight = image.height / designHeight;
-
-		return new StylizedTemplateDesign(
-			designWidth,
-			designHeight,
-			styleWidth,
-			styleHeight,
-			IndexedArray.index(image.data, palette),
-		);
-	}
-}
-
-export class Template {
-	constructor(
-		readonly design: TemplateDesign,
-		readonly x: number,
-		readonly y: number,
-		readonly title?: string,
-		readonly source?: URL,
-	) {}
-
-	get width() {
-		return this.design.width;
-	}
-
-	get height() {
-		return this.design.height;
-	}
-
-	get size() {
-		return this.design.size;
-	}
-
-	get link() {
-		if(is.undefined(this.source)) {
-			throw new Error("tried to generate a link for a template without a source");
-		}
-
-		return new URL(`https://pxls.space#${
-			Object.entries({
-				"x": this.x + this.width / 2,
-				"y": this.y + this.height / 2,
-				"scale": 4,
-				"template": this.source,
-				"ox": this.x,
-				"oy": this.y,
-				"tw": this.width,
-				"title": this.title,
-				"oo": 1,
-			}).filter((e): e is [string, Exclude<typeof e[1], undefined>] => !is.undefined(e[1]))
-				.map(e => e.map(c => encodeURIComponent(c.toString())))
-				.map(e => e.join("="))
-				.join("&")
-		}`);
-	}
-
-	get data() {
-		return this.design.data;
-	}
-
-	redesigned(design: TemplateDesign) {
-		return new Template(design, this.x, this.y, this.title, this.source);
-	}
-	
-	repositioned(x: number, y: number) {
-		return new Template(this.design, x, y, this.title, this.source);
-	}
-	
-	retitled(title?: string) {
-		return new Template(this.design, this.x, this.y, title, this.source);
-	}
-	
-	resourced(source?: URL) {
-		return new Template(this.design, this.x, this.y, this.title, source);
-	}
-
-	equals(other: Template) {
-		return this.x === other.x
-			&& this.y === other.y
-			&& this.design.equals(other.design);
-	}
-}
 
 const HISTORY_RANGE = Interval.DAY * 7;
 const HISTORY_SIZE = HISTORY_RANGE / Interval.MINUTE;
@@ -346,8 +100,7 @@ export class TrackableTemplate extends Template {
 	private readonly history: TemplateActivity;
 
 	private lastProgress: number;
-	readonly placeableSize: number;
-	private placeableShadow: Uint8Array;
+	private readonly placeableSizePrecomputed: number;
 	private progressCache = new Cache();
 
 	constructor(
@@ -369,25 +122,8 @@ export class TrackableTemplate extends Template {
 			this.lastProgress = lastProgress;
 			this.sync();
 		}
-
-		this.placeableShadow = this.pxls.cropPlacemap(
-			this.x,
-			this.y,
-			this.width,
-			this.height,
-		);
 		
-		this.placeableSize = diff(
-			multiply(
-				// Normalize so transparent is 0, then multiply.
-				// This results in all pixels which are transparent on either buffer being 0.
-				add(this.data, -TRANSPARENT_PIXEL),
-				add(this.placeableShadow, -TRANSPARENT_PIXEL),
-			),
-			// Comparing to an empty buffer returns a list of all non-zero indices.
-			// The length of that list is the number of placeable pixels.
-			new Uint8Array(this.data.length),
-		).length;
+		this.placeableSizePrecomputed = super.placeableSize(pxls.placemap);
 	}
 
 	sync(changes?: PixelSync) {
@@ -435,7 +171,7 @@ export class TrackableTemplate extends Template {
 	}
 
 	get progress() {
-		return this.size - this.differences.length;
+		return this.size - this.differences_().length;
 	}
 
 	get eta() {
@@ -485,7 +221,7 @@ export class TrackableTemplate extends Template {
 	}
 
 	get shadow() {
-		return this.pxls.cropCanvas(
+		return this.pxls.canvas.crop(
 			this.x,
 			this.y,
 			this.width,
@@ -493,22 +229,15 @@ export class TrackableTemplate extends Template {
 		);
 	}
 
-	get differences() {
+	differences_() {
 		return this.progressCache.cache(
 			"differences",
-			() => {
-				const shifted = add(this.data, -TRANSPARENT_PIXEL);
-				return diff(
-					shifted,
-					mask(
-						// we need everything to be at the same offset for comparison
-						add(this.shadow, -TRANSPARENT_PIXEL),
-						// use transparent pixels from this template to mask shadow
-						shifted,
-					),
-				);
-			}
+			() => this.differences(this.pxls.canvas)
 		);
+	}
+
+	placeableSize_() {
+		return this.placeableSizePrecomputed;
 	}
 
 	sample(localX: number, localY: number) {
@@ -520,11 +249,11 @@ export class TrackableTemplate extends Template {
 			"name": "transparent",
 		};
 
-		const canvasIndex = this.pxls.canvas[x * this.pxls.width + y];
+		const canvasIndex = this.pxls.canvas.get(x, y);
 		const canvasColor = canvasIndex === TRANSPARENT_PIXEL
 			? transparent
 			: this.pxls.palette[canvasIndex];
-		const designIndex = this.design.data[localX * this.design.width + localY];
+		const designIndex = this.design.get(localX, localY);
 		const designColor = designIndex === TRANSPARENT_PIXEL
 			? transparent
 			: this.pxls.palette[designIndex];
@@ -552,8 +281,9 @@ export class TrackableTemplate extends Template {
 		};
 	}
 
-	equals(other: TrackableTemplate) {
-		return this.pxls === other.pxls
+	equals(other: unknown) {
+		return other instanceof TrackableTemplate
+			&& this.pxls === other.pxls
 			&& super.equals(other);
 	}
 }
@@ -571,7 +301,7 @@ export class TrackedTemplate implements Summarizable {
 		return this.template
 			.retitled(this.name)
 			.resourced(this.source)
-			.link;
+			.link();
 	}
 
 	get summary() {
@@ -586,7 +316,7 @@ export class TrackedTemplate implements Summarizable {
 		const link = !is.undefined(this.source) ? `[template link](${this.link})\n` : "";
 		const formattedProgress = parseFloat((progress / size * 100).toFixed(2));
 
-		const unplaceablePixels = size - this.template.placeableSize;
+		const unplaceablePixels = size - this.template.placeableSize_();
 		const unplaceablePixelsNotice = unplaceablePixels > 0
 			? `\n⚠ *${unplaceablePixels} pixels out of bounds*`
 			: "";
@@ -599,7 +329,8 @@ export class TrackedTemplate implements Summarizable {
 		if(this.template.complete) {
 			return `${overview}`;
 		} else {
-			const { differences, eta } = this.template;
+			const { eta } = this.template;
+			const differences = this.template.differences_();
 			const now = Date.now();
 
 			// rate in px/unit time (px/ms).
@@ -610,7 +341,7 @@ export class TrackedTemplate implements Summarizable {
 			const differencesSummary = differences.length > 0
 				? `\`\`\`css\n${
 					Array.from(differences.slice(0, maxExamples))
-						.map(i => this.template.design.read(i))
+						.map(i => this.template.design.indexToPosition(i))
 						.map(({ x, y }) => this.template.sample(x, y))
 						.map(({ x, y, designColor }) => `[${x}, ${y}] should be ${designColor.name}`)
 						.join("\n")

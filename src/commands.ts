@@ -25,13 +25,14 @@ import {
 	Snowflake,
 } from "discord.js";
 import ExpiryMap from "expiry-map";
+import { Pxls, PxlsColor, StylizedTemplateDesign, TemplateDesign, IndexArray } from "@blankparenthesis/pxlsspace";
 
 const { ApplicationCommandOptionTypes } = Constants;
 
 import Summary from "./summary";
-import { StylizedTemplateDesign, TemplateDesign, TrackableTemplate, TrackedTemplate } from "./template";
+import { TrackableTemplate, TrackedTemplate } from "./template";
 import { hashParams, parseIntOrDefault, sum, zip, humanTime, Interval } from "./util";
-import Pxls from "@blankparenthesis/pxlsspace";
+import { downloadImage } from "./download";
 
 interface State {
 	designs: Map<string, TemplateDesign>;
@@ -196,6 +197,24 @@ function parseMessageReference(input: string, channel: Channel) {
 const DATA_DIR = path.resolve(__dirname, "..", "data");
 const DESIGN_FILE_EXTENSION = ".png";
 
+async function downloadTemplate(source: URL, width: number | undefined, palette: PxlsColor[]) {
+	const image = await downloadImage(source);
+
+	const designWidth = is.undefined(width) ? image.width : width;
+	const designHeight = designWidth / image.width * image.height;
+
+	const styleWidth = image.width / designWidth;
+	const styleHeight = image.height / designHeight;
+
+	return new StylizedTemplateDesign(
+		designWidth,
+		designHeight,
+		styleWidth,
+		styleHeight,
+		IndexArray.index(image.data, palette),
+	);
+}
+
 async function createTemplate(url: string, state: State) {
 	const { title, template, ox, oy, tw } = hashParams(url);
 
@@ -210,7 +229,7 @@ async function createTemplate(url: string, state: State) {
 	const source = new URL(template);
 	const width = parseInt(tw) > 0 ? parseInt(tw) : undefined;
 
-	let design = (await StylizedTemplateDesign.download(
+	let design = (await downloadTemplate( 
 		source,
 		width,
 		state.pxls.palette,
@@ -226,7 +245,7 @@ async function createTemplate(url: string, state: State) {
 			{ "recursive": true },
 		);
 
-		await design.save(
+		await design.toFile(
 			path.resolve(DATA_DIR, "designs", `${hash}${DESIGN_FILE_EXTENSION}`),
 			state.pxls.palette,
 		);
