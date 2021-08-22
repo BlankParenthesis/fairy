@@ -156,7 +156,7 @@ export class TrackableTemplate extends Template {
 					return counts;
 				}, { "positive": 0, "neutral": 0, "negative": 0 });
 			
-			this.history.update(positive, negative, neutral);
+			this.history.update(positive, neutral, negative);
 
 			this.lastProgress += positive - negative;
 		}
