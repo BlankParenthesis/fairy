@@ -407,7 +407,14 @@ async function pruneUnused() {
 		console.debug("Failed to prune design files: ", e);
 	}
 }
+
+async function save() {
+	await fs.writeFile(path.resolve(DATA_DIR, "summaries.json"), JSON.stringify(summaries));
+	await fs.writeFile(path.resolve(DATA_DIR, "templates.json"), JSON.stringify(templates));
+}
+
 setInterval(pruneUnused, 15 * Interval.MINUTE);
+setInterval(save, 15 * Interval.MINUTE);
 
 async function update() {
 	if(pxlsUp) {
@@ -454,8 +461,6 @@ replServer.on("setupContext", context => {
 });
 
 replServer.on("exit", async () => {
-	await fs.writeFile(path.resolve(DATA_DIR, "summaries.json"), JSON.stringify(summaries));
-	await fs.writeFile(path.resolve(DATA_DIR, "templates.json"), JSON.stringify(templates));
-
+	await save();
 	process.exit();
 });
